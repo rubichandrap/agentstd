@@ -32,6 +32,7 @@ export interface AgentStdConfig {
 export interface SyncContext {
   projectRoot: string;
   config: AgentStdConfig;
+  dryRun?: boolean;
 }
 
 export interface DoctorContext {
@@ -39,10 +40,18 @@ export interface DoctorContext {
   config: AgentStdConfig;
 }
 
+export type FileOperation =
+  | { type: 'create-dir'; dir: string }
+  | { type: 'create-file'; path: string }
+  | { type: 'update-file'; path: string }
+  | { type: 'copy-dir'; from: string; to: string }
+  | { type: 'skip'; description: string; reason: string };
+
 export interface SyncResult {
   target: string;
   changed: string[];
   warnings: string[];
+  operations: FileOperation[];
 }
 
 export interface DoctorCheck {

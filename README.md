@@ -1,12 +1,20 @@
 # AgentStd
 
-Standardize hooks, skills, and shared instructions across AI coding agents.
+[![CI](https://github.com/rubichandrap/agentstd/actions/workflows/ci.yml/badge.svg)](https://github.com/rubichandrap/agentstd/actions/workflows/ci.yml)
+[![license](https://img.shields.io/github/license/rubichandrap/agentstd.svg)](https://github.com/rubichandrap/agentstd/blob/main/LICENSE)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue.svg)](https://www.typescriptlang.org/)
+[![npm version](https://img.shields.io/npm/v/agentstd.svg)](https://www.npmjs.com/package/agentstd)
+[![Node.js](https://img.shields.io/badge/node-%3E%3D20.20.0-brightgreen.svg)](https://nodejs.org/)
 
-AgentStd gives your repository one source of truth for AI agent behavior, then syncs it into agent-specific config folders such as `.claude`.
+Standardize hooks, skills, and shared instructions across AI coding agents.
 
 Write your agent rules once. Sync them everywhere.
 
-## What problem does AgentStd solve?
+## What is AgentStd?
+
+AgentStd gives your repository one source of truth for AI agent behavior. You write your hooks, skills, and instructions in a centralized `.agentstd` directory, then sync them into agent-specific config folders such as `.claude`.
+
+## Why AgentStd?
 
 When using multiple AI coding agents (Claude Code, OpenCode, CommandCode, Pi, etc.), each agent expects its own config folder and format. You end up duplicating the same hooks, skills, and instructions across different folders. AgentStd eliminates this duplication by centralizing your rules, then compiling them to each agent's native format.
 
@@ -14,6 +22,9 @@ When using multiple AI coding agents (Claude Code, OpenCode, CommandCode, Pi, et
 
 ```bash
 pnpm add -g agentstd
+
+# or
+npm install -g agentstd
 ```
 
 ## Quick start
@@ -22,13 +33,13 @@ pnpm add -g agentstd
 # Initialize AgentStd in your project
 agentstd init
 
-# Sync your configuration to all configured agents
+# Preview what would change
+agentstd sync --dry-run
+
+# Apply changes
 agentstd sync
 
-# Or sync to a specific agent
-agentstd sync claude
-
-# Check that everything is healthy
+# Verify everything is healthy
 agentstd doctor
 ```
 
@@ -53,6 +64,12 @@ agentstd sync
 
 # Sync only a specific target
 agentstd sync claude
+
+# Preview changes without writing files
+agentstd sync --dry-run
+
+# Check if project is fully synced (exit code 1 if changes needed)
+agentstd sync --check
 ```
 
 For Claude, this:
@@ -82,7 +99,13 @@ Shows a skill's full metadata and content.
 
 Lists supported targets and their capability status.
 
-## Claude support
+## Claude Code support
+
+Claude Code is the first supported target agent. AgentStd currently syncs:
+
+- **Skills** into `.claude/skills/` — full native support
+- **PreToolUse hook** into `.claude/settings.json` — full native support
+- **Instructions** — partial support
 
 | Feature       | Status    |
 |---------------|-----------|
@@ -90,12 +113,20 @@ Lists supported targets and their capability status.
 | Skills        | Native    |
 | Instructions  | Partial   |
 
-The Claude adapter:
+The Claude adapter preserves existing settings and hooks you may have configured directly. It never overwrites unrelated configuration.
 
-- Writes to `.claude/settings.json` with proper hook config
-- Copies skill directories to `.claude/skills/`
-- Preserves existing Claude settings and hooks
-- Never overwrites unrelated configuration
+## Safety guarantees
+
+AgentStd is designed to be safe and predictable:
+
+- **Source of truth**: `.agentstd` is the single source of truth; agent configs are derived
+- **Never deletes user files**: Only writes and updates agent-specific config
+- **Preserves unknown settings**: Existing customization in agent configs is left intact
+- **Idempotent**: Running `agentstd sync` multiple times produces the same result
+- **No duplicate hooks**: AgentStd detects and avoids duplicating already-synced hooks
+- **No duplicate skills**: Skills are compared and unchanged skills are skipped
+- **Dry-run mode** (`agentstd sync --dry-run`): Preview all changes before applying
+- **Check mode** (`agentstd sync --check`): Verify sync status in CI/CD pipelines
 
 ## Roadmap
 
@@ -105,8 +136,6 @@ The Claude adapter:
 - Runtime skill discovery
 - Policy-based hook rules
 - Adapter plugin API
-- Dry-run mode
-- Config diff mode
 
 ## License
 

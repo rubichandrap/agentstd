@@ -18,7 +18,15 @@ program.command('init').description('Initialize AgentStd in the current director
 program
   .command('sync [target]')
   .description('Sync AgentStd configuration to target agent folders. Specify a target (e.g. claude) to sync only that agent.')
-  .action(syncCmd);
+  .option('--dry-run', 'Show what would be changed without making changes')
+  .option('--check', 'Check if project is fully synced (exit code 1 if changes needed)')
+  .action((target, options) => {
+    if (options.dryRun && options.check) {
+      console.error('Cannot use --dry-run and --check together.');
+      process.exit(2);
+    }
+    syncCmd(target, options);
+  });
 
 program.command('doctor').description('Check project state and report issues').action(doctorCmd);
 

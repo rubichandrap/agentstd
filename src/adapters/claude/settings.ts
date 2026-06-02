@@ -53,14 +53,17 @@ export async function upsertPreToolUseHook(
   config: AgentStdConfig,
 ): Promise<boolean> {
   const settings = await readSettings(settingsPath);
-  const hooks: Record<string, ClaudeHook[]> = settings.hooks ?? {};
+  const finalHooks = computeFinalHooks(settings, config);
+  await writeJson(settingsPath, { ...settings, hooks: finalHooks });
+  return true;
+}
 
+function computeFinalHooks(settings: ClaudeSettings, config: AgentStdConfig): Record<string, ClaudeHook[]> {
+  const hooks: Record<string, ClaudeHook[]> = settings.hooks ?? {};
   const existingHooks = hooks.PreToolUse ?? [];
 
-  // remove any existing agentstd hooks
   const filtered = existingHooks.filter((h) => !isAgentStdHook(h));
 
-  // add the current agentstd hook if preToolUse is configured
   if (config.hooks.preToolUse) {
     const agentStdHook = buildAgentStdHook(config);
     filtered.push(markAsAgentStd(agentStdHook));
@@ -69,7 +72,6 @@ export async function upsertPreToolUseHook(
   const finalHooks: Record<string, ClaudeHook[]> = {};
   for (const key of Object.keys(hooks)) {
     if (key === 'PreToolUse') continue;
-    // strip _agentstd before writing
     finalHooks[key] = hooks[key].map((h) => {
       const { _agentstd, ...rest } = h as ClaudeHookWithMeta;
       return rest;
@@ -80,8 +82,14 @@ export async function upsertPreToolUseHook(
     return rest;
   });
 
-  await writeJson(settingsPath, { ...settings, hooks: finalHooks });
-  return true;
+  return finalHooks;
+}
+
+export async function needsSettingsUpdate(settingsPath: string, config: AgentStdConfig): Promise<boolean> {
+  const settings = await readSettings(settingsPath);
+  const finalHooks = computeFinalHooks(settings, config);
+  const currentHooks = settings.hooks ?? {};
+  return JSON.stringify(currentHooks) !== JSON.stringify(finalHooks);
 }
 
 export async function hasPreToolUseHookSynced(
