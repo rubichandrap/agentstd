@@ -1,14 +1,14 @@
+import fs from 'fs-extra';
 import type { AgentStdConfig } from '../../core/config';
-import { readJsonIfExists, writeJson } from '../../core/fs';
+import { fileExists, writeJson } from '../../core/fs';
 
 const AGENTSTD_HOOK_ID = 'agentstd-pretooluse';
 
 interface ClaudeHook {
   matcher: string;
   hooks: ClaudeHookEntry[];
+  _agentstd?: string;
 }
-
-type ClaudeHookWithMeta = ClaudeHook & { _agentstd?: string };
 
 interface ClaudeHookEntry {
   type: string;
@@ -21,7 +21,7 @@ interface ClaudeSettings {
 }
 
 function buildAgentStdHook(config: AgentStdConfig): ClaudeHook {
-  return {
+  const hook: ClaudeHook = {
     matcher: 'Bash|Edit|Write|MultiEdit',
     hooks: [
       {
@@ -29,23 +29,26 @@ function buildAgentStdHook(config: AgentStdConfig): ClaudeHook {
         command: config.hooks.preToolUse?.command ?? '',
       },
     ],
+    _agentstd: AGENTSTD_HOOK_ID,
   };
-}
-
-function markAsAgentStd(hook: ClaudeHook): ClaudeHook {
-  // copy hook structure to an object we can annotate without breaking merge
-  const tagged: ClaudeHook & { _agentstd?: string } = { ...hook };
-  tagged._agentstd = AGENTSTD_HOOK_ID;
-  return tagged;
+  return hook;
 }
 
 function isAgentStdHook(hook: ClaudeHook): boolean {
+  if (hook._agentstd === AGENTSTD_HOOK_ID) return true;
   const cmd = (hook.hooks?.[0] as ClaudeHookEntry | undefined)?.command ?? '';
   return cmd.includes('agentstd/hooks/pretooluse');
 }
 
 export async function readSettings(settingsPath: string): Promise<ClaudeSettings> {
-  return (await readJsonIfExists<ClaudeSettings>(settingsPath)) ?? {};
+  if (!(await fileExists(settingsPath))) return {};
+  const raw = await fs.readFile(settingsPath, 'utf8');
+  try {
+    return JSON.parse(raw) as ClaudeSettings;
+  } catch (err) {
+    const msg = err instanceof SyntaxError ? err.message : String(err);
+    throw new Error(`Invalid JSON in ${settingsPath}: ${msg}`);
+  }
 }
 
 export async function upsertPreToolUseHook(
@@ -66,19 +69,19 @@ function computeFinalHooks(settings: ClaudeSettings, config: AgentStdConfig): Re
 
   if (config.hooks.preToolUse) {
     const agentStdHook = buildAgentStdHook(config);
-    filtered.push(markAsAgentStd(agentStdHook));
+    filtered.push(agentStdHook);
   }
 
   const finalHooks: Record<string, ClaudeHook[]> = {};
   for (const key of Object.keys(hooks)) {
     if (key === 'PreToolUse') continue;
     finalHooks[key] = hooks[key].map((h) => {
-      const { _agentstd, ...rest } = h as ClaudeHookWithMeta;
+      const { _agentstd, ...rest } = h;
       return rest;
     });
   }
   finalHooks.PreToolUse = filtered.map((h) => {
-    const { _agentstd, ...rest } = h as ClaudeHookWithMeta;
+    const { _agentstd, ...rest } = h;
     return rest;
   });
 

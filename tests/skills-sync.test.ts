@@ -3,7 +3,7 @@ import path from 'node:path';
 import fs from 'fs-extra';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { syncClaudeSkills } from '../src/adapters/claude/skills';
-import type { FileOperation, SyncContext } from '../src/core/types';
+import type { SyncContext } from '../src/core/types';
 
 describe('Claude skills sync', () => {
   let tmpDir: string;

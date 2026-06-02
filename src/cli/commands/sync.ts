@@ -19,50 +19,43 @@ export interface SyncOptions {
 }
 
 function printOperations(operations: FileOperation[]): void {
-  const sections = {
-    createDir: operations.filter((o) => o.type === 'create-dir'),
-    createFile: operations.filter((o) => o.type === 'create-file'),
-    updateFile: operations.filter((o) => o.type === 'update-file'),
-    copyDir: operations.filter((o) => o.type === 'copy-dir'),
-    skip: operations.filter((o) => o.type === 'skip'),
-  };
+  const creates = operations.filter((o) => o.type === 'create-file' || o.type === 'create-dir');
+  const copies = operations.filter((o) => o.type === 'copy-dir');
+  const updates = operations.filter((o) => o.type === 'update-file');
+  const skips = operations.filter((o) => o.type === 'skip');
 
-  if (sections.createDir.length > 0) {
-    log.info('Would create directories:');
-    for (const op of sections.createDir) {
-      log.dim(`  ${pc.green('+')} ${(op as Extract<FileOperation, { type: 'create-dir' }>).dir}`);
+  if (creates.length > 0) {
+    console.log('Would create:');
+    for (const op of creates) {
+      if (op.type === 'create-dir') {
+        console.log(`- ${op.dir}`);
+      } else {
+        console.log(`- ${op.path}`);
+      }
     }
     console.log();
   }
 
-  if (sections.createFile.length > 0) {
-    log.info('Would create:');
-    for (const op of sections.createFile) {
-      log.dim(`  ${pc.green('+')} ${(op as Extract<FileOperation, { type: 'create-file' }>).path}`);
+  if (copies.length > 0) {
+    console.log('Would copy:');
+    for (const op of copies) {
+      console.log(`- ${op.from} to ${op.to}`);
     }
     console.log();
   }
 
-  if (sections.copyDir.length > 0) {
-    log.info('Would copy:');
-    for (const op of sections.copyDir) {
-      log.dim(`  ${pc.cyan('→')} ${(op as Extract<FileOperation, { type: 'copy-dir' }>).from} ${pc.dim('to')} ${(op as Extract<FileOperation, { type: 'copy-dir' }>).to}`);
+  if (updates.length > 0) {
+    console.log('Would update:');
+    for (const op of updates) {
+      console.log(`- ${op.path}`);
     }
     console.log();
   }
 
-  if (sections.updateFile.length > 0) {
-    log.info('Would update:');
-    for (const op of sections.updateFile) {
-      log.dim(`  ${pc.yellow('~')} ${(op as Extract<FileOperation, { type: 'update-file' }>).path}`);
-    }
-    console.log();
-  }
-
-  if (sections.skip.length > 0) {
-    log.info('Would skip:');
-    for (const op of sections.skip) {
-      log.dim(`  ${pc.dim('-')} ${(op as Extract<FileOperation, { type: 'skip' }>).reason}`);
+  if (skips.length > 0) {
+    console.log('Would skip:');
+    for (const op of skips) {
+      console.log(`- ${op.reason}`);
     }
     console.log();
   }
@@ -104,8 +97,9 @@ export async function syncCmd(target?: string, options?: Record<string, unknown>
   const dryRun = !!(options as SyncOptions)?.dryRun;
   const check = !!(options as SyncOptions)?.check;
 
-  let allOperations: FileOperation[] = [];
-  let hasChanges = false;
+  const adapterDryRun = dryRun || check;
+
+  const allOperations: FileOperation[] = [];
 
   for (const t of targets) {
     if (target && !config.targets.includes(t)) {
@@ -119,13 +113,10 @@ export async function syncCmd(target?: string, options?: Record<string, unknown>
       continue;
     }
 
-    const result = await adapter.sync({ projectRoot: root, config, dryRun });
+    const result = await adapter.sync({ projectRoot: root, config, dryRun: adapterDryRun });
     allOperations.push(...result.operations);
 
     if (dryRun || check) {
-      if (result.changed.length > 0) {
-        hasChanges = true;
-      }
       continue;
     }
 
@@ -151,7 +142,9 @@ export async function syncCmd(target?: string, options?: Record<string, unknown>
   }
 
   if (check) {
-    if (!hasChanges) {
+    const activeOperations = allOperations.filter((op) => op.type !== 'skip');
+
+    if (activeOperations.length === 0) {
       console.log(pc.bold(pc.blue('AgentStd Sync Check\n')));
       console.log(pc.green('Everything is already synced.\n'));
       process.exit(0);
@@ -160,19 +153,19 @@ export async function syncCmd(target?: string, options?: Record<string, unknown>
     console.log(pc.bold(pc.blue('AgentStd Sync Check\n')));
     console.log(pc.yellow('Project is not fully synced.\n'));
     console.log('Required changes:');
-    for (const op of allOperations) {
+    for (const op of activeOperations) {
       switch (op.type) {
         case 'create-dir':
-          log.dim(`  create directory ${op.dir}`);
+          console.log(`- create ${op.dir}`);
           break;
         case 'create-file':
-          log.dim(`  create ${op.path}`);
+          console.log(`- create ${op.path}`);
           break;
         case 'update-file':
-          log.dim(`  update ${op.path}`);
+          console.log(`- update ${op.path}`);
           break;
         case 'copy-dir':
-          log.dim(`  copy ${op.from} to ${op.to}`);
+          console.log(`- copy ${op.from} to ${op.to}`);
           break;
       }
     }

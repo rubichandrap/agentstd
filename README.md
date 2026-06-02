@@ -20,11 +20,23 @@ When using multiple AI coding agents (Claude Code, OpenCode, CommandCode, Pi, et
 
 ## Installation
 
+After the first npm release:
+
 ```bash
 pnpm add -g agentstd
 
 # or
 npm install -g agentstd
+```
+
+### From source
+
+```bash
+git clone https://github.com/rubichandrap/agentstd.git
+cd agentstd
+pnpm install
+pnpm build
+npm install -g .
 ```
 
 ## Quick start

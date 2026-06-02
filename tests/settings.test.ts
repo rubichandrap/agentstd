@@ -97,4 +97,109 @@ describe('Claude settings', () => {
     const settings = await readSettings(settingsPath);
     expect(settings.hooks?.PreToolUse).toHaveLength(0);
   });
+
+  it('preserves unknown top-level fields', async () => {
+    await fs.writeFile(
+      settingsPath,
+      JSON.stringify({
+        permissions: { allow: ['Bash(git:*)'] },
+        hooks: {
+          Notification: [
+            { matcher: '', hooks: [{ type: 'command', command: 'notify.sh' }] },
+          ],
+        },
+      }),
+    );
+    await upsertPreToolUseHook(settingsPath, config);
+    const settings = await readSettings(settingsPath);
+    expect(settings.permissions).toBeDefined();
+    expect(settings.hooks?.Notification).toHaveLength(1);
+    expect(settings.hooks?.PreToolUse).toHaveLength(1);
+  });
+
+  it('preserves unrelated PreToolUse hooks', async () => {
+    await fs.writeFile(
+      settingsPath,
+      JSON.stringify({
+        hooks: {
+          PreToolUse: [
+            {
+              matcher: 'Read',
+              hooks: [{ type: 'command', command: '/usr/bin/audit-read' }],
+            },
+          ],
+        },
+      }),
+    );
+    await upsertPreToolUseHook(settingsPath, config);
+    const settings = await readSettings(settingsPath);
+    expect(settings.hooks?.PreToolUse).toHaveLength(2);
+    const auditHook = settings.hooks?.PreToolUse.find((h) => h.hooks[0].command === '/usr/bin/audit-read');
+    expect(auditHook).toBeDefined();
+  });
+
+  it('updates existing AgentStd hook if command changes', async () => {
+    await upsertPreToolUseHook(settingsPath, config);
+    const updatedConfig = {
+      ...config,
+      hooks: { preToolUse: { command: 'node .agentstd/hooks/pretooluse-v2.js' } },
+    };
+    await upsertPreToolUseHook(settingsPath, updatedConfig);
+    const settings = await readSettings(settingsPath);
+    expect(settings.hooks?.PreToolUse).toHaveLength(1);
+    expect(settings.hooks?.PreToolUse[0].hooks[0].command).toBe(
+      'node .agentstd/hooks/pretooluse-v2.js',
+    );
+  });
+
+  it('handles missing hooks section', async () => {
+    await fs.writeFile(settingsPath, JSON.stringify({ permissions: {} }));
+    await upsertPreToolUseHook(settingsPath, config);
+    const settings = await readSettings(settingsPath);
+    expect(settings.hooks).toBeDefined();
+    expect(settings.hooks?.PreToolUse).toHaveLength(1);
+  });
+
+  it('handles missing hooks.PreToolUse', async () => {
+    await fs.writeFile(
+      settingsPath,
+      JSON.stringify({ hooks: { Notification: [] } }),
+    );
+    await upsertPreToolUseHook(settingsPath, config);
+    const settings = await readSettings(settingsPath);
+    expect(settings.hooks?.PreToolUse).toHaveLength(1);
+    expect(settings.hooks?.Notification).toBeDefined();
+  });
+
+  it('fails clearly on invalid JSON without overwriting', async () => {
+    await fs.writeFile(settingsPath, '{ broken json!!!!');
+    await expect(upsertPreToolUseHook(settingsPath, config)).rejects.toThrow('Invalid JSON');
+    const raw = await fs.readFile(settingsPath, 'utf8');
+    expect(raw).toBe('{ broken json!!!!');
+  });
+
+  it('does not duplicate AgentStd hook on repeated sync', async () => {
+    await upsertPreToolUseHook(settingsPath, config);
+    await upsertPreToolUseHook(settingsPath, config);
+    await upsertPreToolUseHook(settingsPath, config);
+    const settings = await readSettings(settingsPath);
+    expect(settings.hooks?.PreToolUse).toHaveLength(1);
+  });
+
+  it('preserves unrelated hook categories', async () => {
+    await fs.writeFile(
+      settingsPath,
+      JSON.stringify({
+        hooks: {
+          PostToolUse: [
+            { matcher: '', hooks: [{ type: 'command', command: 'log.sh' }] },
+          ],
+        },
+      }),
+    );
+    await upsertPreToolUseHook(settingsPath, config);
+    const settings = await readSettings(settingsPath);
+    expect(settings.hooks?.PostToolUse).toHaveLength(1);
+    expect(settings.hooks?.PreToolUse).toHaveLength(1);
+  });
 });

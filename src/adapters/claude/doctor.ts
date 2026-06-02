@@ -37,11 +37,27 @@ export async function doctor(ctx: DoctorContext): Promise<DoctorResult> {
 
   // skills synced
   const srcDir = config.skills.dir;
-  const srcExists = await fileExists(path.resolve(root, srcDir));
+  const srcSkillsPath = path.resolve(root, srcDir);
+  const srcExists = await fileExists(srcSkillsPath);
   const destExists = await fileExists(claudeSkillsDir(root));
 
+  // Check for invalid skill folders (missing SKILL.md)
+  if (srcExists) {
+    const skillFolders = await readDir(srcSkillsPath);
+    for (const folder of skillFolders) {
+      const mdPath = path.join(srcSkillsPath, folder, 'SKILL.md');
+      if (!(await fileExists(mdPath))) {
+        checks.push({
+          label: `Invalid skill folder: ${folder}`,
+          status: 'fail',
+          message: `Missing ${path.join(srcDir, folder, 'SKILL.md')}. Add a SKILL.md file with frontmatter (name, description).`,
+        });
+      }
+    }
+  }
+
   if (srcExists && destExists) {
-    const srcSkills = await readDir(path.resolve(root, srcDir));
+    const srcSkills = await readDir(srcSkillsPath);
     const destSkills = await readDir(claudeSkillsDir(root));
     const synced = srcSkills.every((s) => destSkills.includes(s)) && srcSkills.length > 0;
     checks.push({
