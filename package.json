@@ -5,10 +5,6 @@
   "author": "rubichandrap",
   "repository": "github:rubichandrap/agentstd",
   "type": "module",
-  "packageManager": "pnpm@11.5.0+sha512.dbfcc4f81cf48597afd4bc391ffdf12c11f1a9fb83a395bfa6b0a2d9cc2fd8ffebafdb1ccbd529632153f793904c2615b7f09fe1a345473fd1c35845172a8eb1",
-  "engines": {
-    "node": ">=24.0.0"
-  },
   "bin": {
     "agentstd": "./dist/index.js"
   },
@@ -52,5 +48,9 @@
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"
-  }
+  },
+  "engines": {
+    "node": ">=20.20.0"
+  },
+  "packageManager": "pnpm@9.15.9+sha512.68046141893c66fad01c079231128e9afb89ef87e2691d69e4d40eee228988295fd4682181bae55b58418c3a253bde65a505ec7c5f9403ece5cc3cd37dcf2531"
 }
