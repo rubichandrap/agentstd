@@ -1,0 +1,14 @@
+version: 1
+
+targets:
+  - claude
+
+hooks:
+  preToolUse:
+    command: node .agentstd/hooks/pretooluse.js
+
+skills:
+  dir: .agentstd/skills
+
+instructions:
+  shared: .agentstd/instructions/shared.md

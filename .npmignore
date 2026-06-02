@@ -1,0 +1,13 @@
+src
+tests
+.github
+.commandcode
+.editorconfig
+.npmrc
+.gitignore
+biome.jsonc
+pnpm-lock.yaml
+pnpm-workspace.yaml
+tsconfig.json
+AGENTS.md
+.husky
