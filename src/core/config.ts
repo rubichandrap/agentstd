@@ -14,9 +14,10 @@ export const agentStdConfigSchema = z.object({
     .default({}),
   skills: z
     .object({
-      dir: z.string().default('.agentstd/skills'),
+      dir: z.string().default('.agents/skills'),
+      homeDir: z.string().default('.agents/skills'),
     })
-    .default({ dir: '.agentstd/skills' }),
+    .default({ dir: '.agents/skills', homeDir: '.agents/skills' }),
   instructions: z
     .object({
       shared: z.string().optional(),

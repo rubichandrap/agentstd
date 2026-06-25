@@ -1,7 +1,9 @@
 import path from 'node:path';
 import fs from 'fs-extra';
-import { copyDir, ensureDir, fileExists, readDir } from '../../core/fs';
-import { claudeSkillsDir } from '../../core/paths';
+import { copyDir, ensureDir, fileExists } from '../../core/fs';
+import { claudeSkillsDir, homeRoot } from '../../core/paths';
+import { resolveSkillSources } from '../../core/skill-resolve';
+import { listMergedSkills } from '../../core/skill';
 import type { FileOperation, SyncContext } from '../../core/types';
 
 export async function syncClaudeSkills(
@@ -9,23 +11,27 @@ export async function syncClaudeSkills(
   existingOperations: FileOperation[],
 ): Promise<{ changed: string[]; operations: FileOperation[] }> {
   const changed: string[] = [];
-  const srcSkills = path.resolve(ctx.projectRoot, ctx.config.skills.dir);
   const destSkills = claudeSkillsDir(ctx.projectRoot);
 
-  const srcExists = await fileExists(srcSkills);
-  if (!srcExists) {
+  const homeRootResolved = ctx.homeRoot ?? homeRoot();
+  const sources = resolveSkillSources(ctx.projectRoot, ctx.config, homeRootResolved);
+  const skills = await listMergedSkills(sources);
+
+  if (skills.length === 0) {
     return { changed, operations: existingOperations };
   }
 
   const destExists = await fileExists(destSkills);
   if (!destExists) {
-    existingOperations.push({ type: 'create-dir', dir: path.relative(ctx.projectRoot, destSkills) || destSkills });
+    existingOperations.push({
+      type: 'create-dir',
+      dir: path.relative(ctx.projectRoot, destSkills) || destSkills,
+    });
   }
 
-  const skillDirs = await readDir(srcSkills);
-  for (const dirName of skillDirs) {
-    const src = path.join(srcSkills, dirName);
-    const dest = path.join(destSkills, dirName);
+  for (const skill of skills) {
+    const src = path.join(skill.dir, skill.dirName);
+    const dest = path.join(destSkills, skill.dirName);
 
     const destSkillExists = await fileExists(dest);
 
@@ -38,22 +44,26 @@ export async function syncClaudeSkills(
       if (srcContent === destContent) {
         existingOperations.push({
           type: 'skip',
-          description: `skills/${dirName}`,
-          reason: `unchanged skill ${dirName}`,
+          description: `skills/${skill.dirName}`,
+          reason: `unchanged skill ${skill.dirName}`,
         });
         continue;
       }
     }
 
     const relDest = path.relative(ctx.projectRoot, destSkills) || destSkills;
-    const fullDest = path.join(relDest, dirName);
-    existingOperations.push({ type: 'copy-dir', from: path.relative(ctx.projectRoot, src) || src, to: fullDest });
+    const fullDest = path.join(relDest, skill.dirName);
+    const fromPath =
+      skill.source === 'home'
+        ? path.join(skill.dir, skill.dirName)
+        : path.relative(ctx.projectRoot, src) || src;
+    existingOperations.push({ type: 'copy-dir', from: fromPath, to: fullDest });
 
     if (!ctx.dryRun) {
       await ensureDir(destSkills);
       await copyDir(src, dest);
     }
-    changed.push(`skills/${dirName}`);
+    changed.push(`skills/${skill.dirName}`);
   }
 
   return { changed, operations: existingOperations };

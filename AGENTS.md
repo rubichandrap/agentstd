@@ -12,20 +12,23 @@ See @README.md for project overview and @package.json for available pnpm command
 
 The project uses an adapter pattern for multi-agent support:
 
-- `src/core/` — shared types, config schema (Zod), path helpers, filesystem utilities, skill parser (gray-matter), logger
+- `src/core/` — shared types, config schema (Zod), config merge (home+project layering), path helpers (project + home), filesystem utilities, skill parser (gray-matter), skill source resolution, logger
 - `src/adapters/claude/` — Claude-specific sync, doctor, settings merge, and skill copy logic. Implements the `AgentAdapter` interface.
 - `src/cli/commands/` — Commander.js command handlers (`init`, `sync`, `doctor`, `skills`, `targets`)
 - `src/cli/index.ts` — CLI entry point, wires commands to the Commander program
 
 Key design decisions:
 
-- **Config validation** is centralized in `src/core/config.ts` using Zod. All commands load and validate `.agentstd.yaml` through this schema.
-- **Adapter interface** (`src/core/types.ts`) defines `sync()`, `doctor()`, and `detect()` methods. New agents are added by implementing this interface and registering in the adapters map.
+- **Config validation** is centralized in `src/core/config.ts` using Zod. The Zod schema defines `skills.dir` and `skills.homeDir` (both default `.agents/skills`); `AgentStdConfig` is exported as a re-exported `z.infer` so there is one type source of truth (do not duplicate it in `types.ts`).
+- **Layered home + project sources**: `src/core/config-merge.ts` `loadMergedConfig(projectRoot, homeRoot)` deep-merges `~/.agentstd.yaml` under `./.agentstd.yaml` (project scalars win, `targets` array replaced, `version` must match). No home config = project-only (silent, zero behavior change). Hooks/instructions replace by filename (project wins); skills union with project shadowing home by `dirName`. `src/core/skill-resolve.ts` `resolveSkillSources()` returns the ordered `[home, project]` sources; `listMergedSkills()` dedups by `dirName` keeping the project copy, tagging each `SkillMeta` with `source: 'home' | 'project'`.
+- **Home root**: `src/core/paths.ts` `homeRoot()` returns `process.env.AGENTSTD_HOME ?? os.homedir()`. All home path helpers (`homeAgentStdConfigPath`, `homeHooksDir`, `homeInstructionsDir`, `homeAgentsSkillsDir`) derive from it. `AGENTSTD_HOME` is the seam used by tests for hermetic isolation.
+- **Adapter interface** (`src/core/types.ts`) defines `sync()`, `doctor()`, and `detect()` methods; `SyncContext`/`DoctorContext` carry an optional `homeRoot` so adapters can resolve home skills/hooks. New agents are added by implementing this interface and registering in the adapters map in `src/cli/commands/sync.ts` and `src/cli/commands/doctor.ts`.
 - **Settings merge** is idempotent: Claude's `settings.json` is read, existing non-AgentStd hooks are preserved, and the AgentStd hook is upserted by detecting its command string pattern. `needsSettingsUpdate()` compares computed vs current hooks to avoid unnecessary writes.
 - **Sync plan/apply pattern**: `sync()` returns `FileOperation[]` alongside changed files. The same planning logic is used for real sync, dry-run (`--dry-run`), and check mode (`--check`). Operations include `create-dir`, `create-file`, `update-file`, `copy-dir`, and `skip`.
 - **DryRun flag** is threaded through `SyncContext` so adapters compute but skip writes when true.
 - **Templates** live in `templates/` and serve as both the `agentstd init` source and the package's bundled defaults.
-- **Tests** use `vitest` with real temp directories (`fs-extra` + `os.tmpdir()`) for filesystem tests.
+- **`agentstd init --global`** seeds `~/.agentstd.yaml`, `~/.agentstd/hooks/pretooluse.js`, and `~/.agents/skills/` (refuses to overwrite); project `init` never touches `$HOME`.
+- **Tests** use `vitest` with real temp directories (`fs-extra` + `os.tmpdir()`). Tests isolate home by passing `homeRoot` in `SyncContext` (a non-existent tmp subdir) or setting `AGENTSTD_HOME` to a tmp dir, so the real `~/.agentstd.yaml`/`~/.agents/skills` never leak in.
 
 ## Common Workflows
 

@@ -3,8 +3,21 @@ import fs from 'fs-extra';
 import YAML from 'yaml';
 import { ensureDir, fileExists } from '../../core/fs';
 import { log } from '../../core/logger';
+import { homeRoot } from '../../core/paths';
 
-export async function initCmd(): Promise<void> {
+export interface InitOptions {
+  global?: boolean;
+}
+
+export async function initCmd(options?: InitOptions): Promise<void> {
+  if (options?.global) {
+    await initGlobal();
+    return;
+  }
+  await initProject();
+}
+
+async function initProject(): Promise<void> {
   const root = process.cwd();
   const configFile = path.join(root, '.agentstd.yaml');
   const agentStdDir = path.join(root, '.agentstd');
@@ -14,16 +27,39 @@ export async function initCmd(): Promise<void> {
     return;
   }
 
-  await createDefaults(root, agentStdDir, configFile);
+  await createProjectDefaults(root, agentStdDir, configFile);
 
   log.success('AgentStd initialized successfully!');
   log.info('Next steps:');
   log.dim('  1. Edit .agentstd.yaml to configure targets');
-  log.dim('  2. Add skills to .agentstd/skills/');
+  log.dim(
+    '  2. Add skills to .agents/skills/ (or run `agentstd init --global` to seed a home skill library)',
+  );
   log.dim('  3. Run: agentstd sync');
 }
 
-async function createDefaults(
+async function initGlobal(): Promise<void> {
+  const home = homeRoot();
+  const configFile = path.join(home, '.agentstd.yaml');
+  const agentStdDir = path.join(home, '.agentstd');
+
+  if (await fileExists(configFile)) {
+    log.warn('Home .agentstd.yaml already exists. Aborting.');
+    return;
+  }
+
+  await createGlobalDefaults(home, agentStdDir, configFile);
+
+  log.success('AgentStd home config initialized!');
+  log.info(`  Created: ${path.join(home, '.agentstd.yaml')}`);
+  log.info(`  Created: ${path.join(home, '.agentstd/hooks/pretooluse.js')}`);
+  log.info(`  Ensured: ${path.join(home, '.agents/skills/')}`);
+  log.dim(
+    '  Drop shared skills (like caveman) into ~/.agents/skills/ and they sync to every project.',
+  );
+}
+
+async function createProjectDefaults(
   _root: string,
   agentStdDir: string,
   configFile: string,
@@ -38,7 +74,8 @@ async function createDefaults(
       },
     },
     skills: {
-      dir: '.agentstd/skills',
+      dir: '.agents/skills',
+      homeDir: '.agents/skills',
     },
     instructions: {
       shared: '.agentstd/instructions/shared.md',
@@ -51,8 +88,9 @@ async function createDefaults(
   await ensureDir(hooksDir);
   await fs.writeFile(path.join(hooksDir, 'pretooluse.js'), getDefaultHook());
 
-  // .agentstd/skills/example-skill/SKILL.md
-  const skillDir = path.join(agentStdDir, 'skills', 'example-skill');
+  // .agents/skills/example-skill/SKILL.md
+  const skillsBase = path.join(_root, '.agents', 'skills');
+  const skillDir = path.join(skillsBase, 'example-skill');
   await ensureDir(skillDir);
   await fs.writeFile(path.join(skillDir, 'SKILL.md'), getDefaultSkillMD());
 
@@ -60,6 +98,42 @@ async function createDefaults(
   const instrDir = path.join(agentStdDir, 'instructions');
   await ensureDir(instrDir);
   await fs.writeFile(path.join(instrDir, 'shared.md'), getDefaultInstructions());
+}
+
+async function createGlobalDefaults(
+  home: string,
+  agentStdDir: string,
+  configFile: string,
+): Promise<void> {
+  const homeHookPath = path.join(home, '.agentstd', 'hooks', 'pretooluse.js');
+
+  // ~/.agentstd.yaml
+  const config = {
+    version: 1,
+    targets: ['claude'],
+    hooks: {
+      preToolUse: {
+        command: `node ${homeHookPath}`,
+      },
+    },
+    skills: {
+      dir: '.agents/skills',
+      homeDir: '.agents/skills',
+    },
+    instructions: {
+      shared: '.agentstd/instructions/shared.md',
+    },
+  };
+  await fs.writeFile(configFile, YAML.stringify(config));
+
+  // ~/.agentstd/hooks/pretooluse.js
+  const hooksDir = path.join(agentStdDir, 'hooks');
+  await ensureDir(hooksDir);
+  await fs.writeFile(path.join(hooksDir, 'pretooluse.js'), getDefaultHook());
+
+  // ~/.agents/skills/ (ensure exists, no seeded content)
+  const skillsBase = path.join(home, '.agents', 'skills');
+  await ensureDir(skillsBase);
 }
 
 function getDefaultHook(): string {

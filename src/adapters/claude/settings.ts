@@ -61,7 +61,10 @@ export async function upsertPreToolUseHook(
   return true;
 }
 
-function computeFinalHooks(settings: ClaudeSettings, config: AgentStdConfig): Record<string, ClaudeHook[]> {
+function computeFinalHooks(
+  settings: ClaudeSettings,
+  config: AgentStdConfig,
+): Record<string, ClaudeHook[]> {
   const hooks: Record<string, ClaudeHook[]> = settings.hooks ?? {};
   const existingHooks = hooks.PreToolUse ?? [];
 
@@ -88,7 +91,10 @@ function computeFinalHooks(settings: ClaudeSettings, config: AgentStdConfig): Re
   return finalHooks;
 }
 
-export async function needsSettingsUpdate(settingsPath: string, config: AgentStdConfig): Promise<boolean> {
+export async function needsSettingsUpdate(
+  settingsPath: string,
+  config: AgentStdConfig,
+): Promise<boolean> {
   const settings = await readSettings(settingsPath);
   const finalHooks = computeFinalHooks(settings, config);
   const currentHooks = settings.hooks ?? {};

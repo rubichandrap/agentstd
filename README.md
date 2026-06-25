@@ -63,8 +63,41 @@ Creates the base AgentStd project structure:
 
 - `.agentstd.yaml` — project configuration
 - `.agentstd/hooks/pretooluse.js` — pre-tool-use safety hook
-- `.agentstd/skills/example-skill/SKILL.md` — example shared skill
+- `.agents/skills/example-skill/SKILL.md` — example shared skill (`.agents/skills` is the source of truth)
 - `.agentstd/instructions/shared.md` — shared instructions
+
+### `agentstd init --global`
+
+Seeds a **home-level** AgentStd config so a shared skill library lives across all your projects:
+
+- `~/.agentstd.yaml` — home configuration (deep-merged under each project)
+- `~/.agentstd/hooks/pretooluse.js` — home hook (shadowed by a project hook of the same name)
+- `~/.agents/skills/` — home skill library (drop skills like Caveman here; they sync into every project)
+
+`AGENTSTD_HOME` overrides the home location (useful for testing or non-standard `$HOME`).
+
+## Home and project layers
+
+AgentStd layers home and project sources exactly like Claude (`~/.claude` + `.claude`) and OpenCode (`~/.config/opencode` + `.opencode`):
+
+```
+~/.agentstd.yaml            home config (shared defaults, deep-merged under each project)
+~/.agentstd/hooks/          home hooks (shadowed by a project hook with the same filename)
+~/.agentstd/instructions/   home instructions (shadowed by project)
+~/.agents/skills/           home skill library (shadowed by a project skill with the same id)
+
+./.agentstd.yaml            project config (overrides home)
+./.agentstd/hooks/          project hooks (replace home by filename)
+./.agentstd/instructions/   project instructions (replace home by filename)
+./.agents/skills/           project skills (source of truth; override home by id)
+```
+
+Merge rules:
+
+- **Config**: project `./.agentstd.yaml` is deep-merged over `~/.agentstd.yaml`. Project scalars win; `targets` is replaced (not concatenated); `version` must match across both.
+- **Skills**: union of `~/.agents/skills/` and `./.agents/skills/`. A project skill with the same id shadows the home one.
+- **Hooks / instructions**: a project file fully replaces a home file by filename.
+- **No home config**: behaves as project-only (zero behavior change).
 
 ### `agentstd sync`
 

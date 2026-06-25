@@ -34,6 +34,7 @@ describe('Sync integration', () => {
   function makeCtx(dryRun = false): SyncContext {
     return {
       projectRoot: tmpDir,
+      homeRoot: path.join(tmpDir, 'home'),
       config: {
         version: 1,
         targets: ['claude'],
@@ -42,7 +43,7 @@ describe('Sync integration', () => {
             command: 'node .agentstd/hooks/pretooluse.js',
           },
         },
-        skills: { dir: '.agentstd/skills' },
+        skills: { dir: '.agents/skills', homeDir: '.agents/skills' },
         instructions: {},
       },
       dryRun,
@@ -59,12 +60,16 @@ describe('Sync integration', () => {
 
     it('creates .agentstd/hooks/pretooluse.js', async () => {
       await initCmd();
-      expect(await fs.pathExists(path.join(tmpDir, '.agentstd', 'hooks', 'pretooluse.js'))).toBe(true);
+      expect(await fs.pathExists(path.join(tmpDir, '.agentstd', 'hooks', 'pretooluse.js'))).toBe(
+        true,
+      );
     });
 
-    it('creates .agentstd/skills/example-skill/SKILL.md', async () => {
+    it('creates .agents/skills/example-skill/SKILL.md', async () => {
       await initCmd();
-      expect(await fs.pathExists(path.join(tmpDir, '.agentstd', 'skills', 'example-skill', 'SKILL.md'))).toBe(true);
+      expect(
+        await fs.pathExists(path.join(tmpDir, '.agents', 'skills', 'example-skill', 'SKILL.md')),
+      ).toBe(true);
     });
 
     it('running init twice does not destroy existing files', async () => {
@@ -88,7 +93,9 @@ describe('Sync integration', () => {
     it('copies skills into .claude/skills', async () => {
       await setupInit();
       await claudeSync(makeCtx(false));
-      expect(await fs.pathExists(path.join(tmpDir, '.claude', 'skills', 'example-skill', 'SKILL.md'))).toBe(true);
+      expect(
+        await fs.pathExists(path.join(tmpDir, '.claude', 'skills', 'example-skill', 'SKILL.md')),
+      ).toBe(true);
     });
 
     it('is idempotent', async () => {

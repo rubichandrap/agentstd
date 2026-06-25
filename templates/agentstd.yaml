@@ -8,7 +8,8 @@ hooks:
     command: node .agentstd/hooks/pretooluse.js
 
 skills:
-  dir: .agentstd/skills
+  dir: .agents/skills
+  homeDir: .agents/skills
 
 instructions:
   shared: .agentstd/instructions/shared.md

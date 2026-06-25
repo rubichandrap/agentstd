@@ -1,12 +1,15 @@
 import path from 'node:path';
-import fs from 'fs-extra';
-import YAML from 'yaml';
 import pc from 'picocolors';
 import { claudeAdapter } from '../../adapters/claude/index';
-import { agentStdConfigSchema } from '../../core/config';
+import {
+  ConfigValidationError,
+  loadMergedConfig,
+  type MergedConfigResult,
+} from '../../core/config-merge';
 import { fileExists } from '../../core/fs';
 import { log } from '../../core/logger';
-import type { AgentAdapter, AgentStdConfig, FileOperation } from '../../core/types';
+import { homeRoot } from '../../core/paths';
+import type { AgentAdapter, FileOperation, SyncContext } from '../../core/types';
 
 const adapters: Record<string, AgentAdapter> = {
   claude: claudeAdapter,
@@ -70,29 +73,25 @@ export async function syncCmd(target?: string, options?: Record<string, unknown>
     process.exit(1);
   }
 
-  const raw = await fs.readFile(configPath, 'utf8');
-  let parsed: unknown;
+  let merged: MergedConfigResult | undefined;
   try {
-    parsed = YAML.parse(raw);
+    merged = await loadMergedConfig(root, homeRoot());
   } catch (err) {
-    log.error(`Invalid YAML in .agentstd.yaml: ${err}`);
-    process.exit(1);
-  }
-
-  const validation = agentStdConfigSchema.safeParse(parsed);
-  if (!validation.success) {
-    log.error('Invalid config:');
-    for (const issue of validation.error.issues) {
-      log.dim(`  - ${issue.path.join('.')}: ${issue.message}`);
+    if (err instanceof ConfigValidationError) {
+      log.error(`Invalid config:`);
+      for (const issue of err.issues) {
+        log.dim(`  - ${issue.path}: ${issue.message}`);
+      }
+    } else {
+      log.error(`${(err as Error).message}`);
     }
     process.exit(1);
   }
 
-  const config: AgentStdConfig = validation.data;
+  if (!merged) return;
+  const { config } = merged;
 
-  const targets = target
-    ? [target]
-    : config.targets;
+  const targets = target ? [target] : config.targets;
 
   const dryRun = !!(options as SyncOptions)?.dryRun;
   const check = !!(options as SyncOptions)?.check;
@@ -103,7 +102,9 @@ export async function syncCmd(target?: string, options?: Record<string, unknown>
 
   for (const t of targets) {
     if (target && !config.targets.includes(t)) {
-      log.warn(`Target "${t}" is not configured in .agentstd.yaml. Use "agentstd sync" to see available targets.`);
+      log.warn(
+        `Target "${t}" is not configured in .agentstd.yaml. Use "agentstd sync" to see available targets.`,
+      );
       continue;
     }
 
@@ -113,7 +114,13 @@ export async function syncCmd(target?: string, options?: Record<string, unknown>
       continue;
     }
 
-    const result = await adapter.sync({ projectRoot: root, config, dryRun: adapterDryRun });
+    const ctx: SyncContext = {
+      projectRoot: root,
+      config,
+      dryRun: adapterDryRun,
+      homeRoot: homeRoot(),
+    };
+    const result = await adapter.sync(ctx);
     allOperations.push(...result.operations);
 
     if (dryRun || check) {

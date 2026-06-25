@@ -29,7 +29,7 @@ describe('Claude settings', () => {
         command: 'node .agentstd/hooks/pretooluse.js',
       },
     },
-    skills: { dir: '.agentstd/skills' },
+    skills: { dir: '.agentstd/skills', homeDir: '.agents/skills' },
     instructions: {},
   };
 
@@ -104,9 +104,7 @@ describe('Claude settings', () => {
       JSON.stringify({
         permissions: { allow: ['Bash(git:*)'] },
         hooks: {
-          Notification: [
-            { matcher: '', hooks: [{ type: 'command', command: 'notify.sh' }] },
-          ],
+          Notification: [{ matcher: '', hooks: [{ type: 'command', command: 'notify.sh' }] }],
         },
       }),
     );
@@ -134,7 +132,9 @@ describe('Claude settings', () => {
     await upsertPreToolUseHook(settingsPath, config);
     const settings = await readSettings(settingsPath);
     expect(settings.hooks?.PreToolUse).toHaveLength(2);
-    const auditHook = settings.hooks?.PreToolUse.find((h) => h.hooks[0].command === '/usr/bin/audit-read');
+    const auditHook = settings.hooks?.PreToolUse.find(
+      (h) => h.hooks[0].command === '/usr/bin/audit-read',
+    );
     expect(auditHook).toBeDefined();
   });
 
@@ -161,10 +161,7 @@ describe('Claude settings', () => {
   });
 
   it('handles missing hooks.PreToolUse', async () => {
-    await fs.writeFile(
-      settingsPath,
-      JSON.stringify({ hooks: { Notification: [] } }),
-    );
+    await fs.writeFile(settingsPath, JSON.stringify({ hooks: { Notification: [] } }));
     await upsertPreToolUseHook(settingsPath, config);
     const settings = await readSettings(settingsPath);
     expect(settings.hooks?.PreToolUse).toHaveLength(1);
@@ -191,9 +188,7 @@ describe('Claude settings', () => {
       settingsPath,
       JSON.stringify({
         hooks: {
-          PostToolUse: [
-            { matcher: '', hooks: [{ type: 'command', command: 'log.sh' }] },
-          ],
+          PostToolUse: [{ matcher: '', hooks: [{ type: 'command', command: 'log.sh' }] }],
         },
       }),
     );

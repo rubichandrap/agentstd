@@ -52,10 +52,7 @@ describe('Skills commands', () => {
     const invalidDir = path.join(tmpDir, 'invalid-skill');
     await fs.ensureDir(validDir);
     await fs.ensureDir(invalidDir);
-    await fs.writeFile(
-      path.join(validDir, 'SKILL.md'),
-      '---\nname: Valid\n---\n\nContent.',
-    );
+    await fs.writeFile(path.join(validDir, 'SKILL.md'), '---\nname: Valid\n---\n\nContent.');
     const skills = await listSkills(tmpDir);
     expect(skills).toHaveLength(1);
     expect(skills[0].name).toBe('Valid');

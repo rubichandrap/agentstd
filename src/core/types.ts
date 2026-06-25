@@ -1,3 +1,7 @@
+import type { AgentStdConfig } from './config';
+
+export type { AgentStdConfig };
+
 export type Capability =
   | 'native'
   | 'plugin'
@@ -13,31 +17,17 @@ export interface AgentCapabilities {
   instructions: Capability;
 }
 
-export interface AgentStdConfig {
-  version: 1;
-  targets: string[];
-  hooks: {
-    preToolUse?: {
-      command: string;
-    };
-  };
-  skills: {
-    dir: string;
-  };
-  instructions: {
-    shared?: string;
-  };
-}
-
 export interface SyncContext {
   projectRoot: string;
   config: AgentStdConfig;
   dryRun?: boolean;
+  homeRoot?: string;
 }
 
 export interface DoctorContext {
   projectRoot: string;
   config: AgentStdConfig;
+  homeRoot?: string;
 }
 
 export type FileOperation =

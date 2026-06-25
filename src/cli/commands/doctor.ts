@@ -1,13 +1,17 @@
 import path from 'node:path';
-import fs from 'fs-extra';
 import pc from 'picocolors';
-import YAML from 'yaml';
 import { claudeAdapter } from '../../adapters/claude/index';
-import { type AgentStdConfig, agentStdConfigSchema } from '../../core/config';
-import { fileExists } from '../../core/fs';
+import { ConfigValidationError, loadMergedConfig } from '../../core/config-merge';
+import { fileExists, readDir } from '../../core/fs';
 import { log } from '../../core/logger';
-import { hooksDir } from '../../core/paths';
-import type { AgentAdapter, DoctorCheck } from '../../core/types';
+import {
+  homeAgentStdConfigPath,
+  homeAgentsSkillsDir,
+  homeHooksDir,
+  homeRoot,
+  hooksDir,
+} from '../../core/paths';
+import type { AgentAdapter, DoctorCheck, DoctorContext } from '../../core/types';
 
 const adapters: Record<string, AgentAdapter> = {
   claude: claudeAdapter,
@@ -40,43 +44,61 @@ export async function doctorCmd(): Promise<void> {
   }
   log.success('.agentstd.yaml found');
 
-  const raw = await fs.readFile(configPath, 'utf8');
-  let parsed: unknown;
   let configValid = false;
-  let config: AgentStdConfig | null = null;
+  let config = null;
   try {
-    parsed = YAML.parse(raw);
-  } catch {
-    // handled below
-  }
-  const validation = agentStdConfigSchema.safeParse(parsed);
-  if (validation.success) {
+    const merged = await loadMergedConfig(root, homeRoot());
+    config = merged.config;
     configValid = true;
-    config = validation.data;
     log.success('config valid');
-  } else {
-    log.error('config invalid');
-    for (const issue of validation.error.issues) {
-      log.dim(`  - ${issue.path.join('.')}: ${issue.message}`);
+    if (merged.sources.length > 1) {
+      log.dim(`  merged from: ${merged.sources.map((s) => s.replace(homeRoot(), '~')).join(', ')}`);
+    }
+  } catch (err) {
+    if (err instanceof ConfigValidationError) {
+      log.error('config invalid');
+      for (const issue of err.issues) {
+        log.dim(`  - ${issue.path}: ${issue.message}`);
+      }
+    } else {
+      log.error(`${(err as Error).message}`);
     }
   }
 
-  const hookExists = await fileExists(path.join(hooksDir(root), 'pretooluse.js'));
-  if (hookExists) {
-    log.success('preToolUse hook found');
+  const projectHookExists = await fileExists(path.join(hooksDir(root), 'pretooluse.js'));
+  const homeHookExists = await fileExists(path.join(homeHooksDir(), 'pretooluse.js'));
+  if (projectHookExists) {
+    log.success('preToolUse hook found (project)');
+  } else if (homeHookExists) {
+    log.success('preToolUse hook found (home)');
   } else {
     log.warn('preToolUse hook missing');
-    log.dim('  Run: agentstd init');
+    log.dim('  Run: agentstd init or agentstd init --global');
   }
 
   if (config) {
     const skDir = path.resolve(root, config.skills.dir);
     if (await fileExists(skDir)) {
-      log.success('skills directory found');
+      log.success('project skills directory found');
     } else {
-      log.error('skills directory not found');
-      log.dim('  Run: agentstd init');
+      log.warn('project skills directory not found');
+      log.dim('  Merged skills will pull from home only');
     }
+  }
+
+  // Home checks
+  log.info(`\n${pc.bold('Home')}`);
+  const homeConfigExists = await fileExists(homeAgentStdConfigPath());
+  if (homeConfigExists) {
+    log.success('home .agentstd.yaml found');
+  } else {
+    log.dim('home config not found (project-only mode)');
+  }
+  const homeSkills = await readDir(homeAgentsSkillsDir());
+  if (homeSkills.length > 0) {
+    log.success(`${homeSkills.length} home skill(s) available`);
+  } else {
+    log.dim('no home skills found at ~/.agents/skills');
   }
 
   if (!configValid || !config) {
@@ -96,7 +118,8 @@ export async function doctorCmd(): Promise<void> {
 
     log.info(pc.bold(adapter.name));
 
-    const result = await adapter.doctor({ projectRoot: root, config });
+    const ctx: DoctorContext = { projectRoot: root, config, homeRoot: homeRoot() };
+    const result = await adapter.doctor(ctx);
     for (const check of result.checks) {
       const icon = statusIcon(check.status);
       if (check.status === 'pass') {

@@ -13,11 +13,22 @@ program
   .description('Standardize hooks, skills, and shared instructions across AI coding agents.')
   .version('0.1.0');
 
-program.command('init').description('Initialize AgentStd in the current directory').action(initCmd);
+program
+  .command('init')
+  .description('Initialize AgentStd in the current directory')
+  .option(
+    '--global',
+    'Initialize home-level AgentStd config (~/.agentstd.yaml + ~/.agents/skills/)',
+  )
+  .action((options) => {
+    initCmd(options);
+  });
 
 program
   .command('sync [target]')
-  .description('Sync AgentStd configuration to target agent folders. Specify a target (e.g. claude) to sync only that agent.')
+  .description(
+    'Sync AgentStd configuration to target agent folders. Specify a target (e.g. claude) to sync only that agent.',
+  )
   .option('--dry-run', 'Show what would be changed without making changes')
   .option('--check', 'Check if project is fully synced (exit code 1 if changes needed)')
   .action((target, options) => {

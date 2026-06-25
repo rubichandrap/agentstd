@@ -13,11 +13,12 @@ describe('Claude skills sync', () => {
     tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agentstd-test-'));
     ctx = {
       projectRoot: tmpDir,
+      homeRoot: path.join(tmpDir, 'home'),
       config: {
         version: 1,
         targets: ['claude'],
         hooks: {},
-        skills: { dir: '.agentstd/skills' },
+        skills: { dir: '.agentstd/skills', homeDir: '.agents/skills' },
         instructions: {},
       },
       dryRun: false,
@@ -46,13 +47,59 @@ describe('Claude skills sync', () => {
   it('returns empty when source skills dir missing', async () => {
     const badCtx: SyncContext = {
       projectRoot: tmpDir,
+      homeRoot: path.join(tmpDir, 'home'),
       config: {
         ...ctx.config,
-        skills: { dir: 'missing' },
+        skills: { dir: 'missing', homeDir: 'nope' },
       },
       dryRun: false,
     };
     const result = await syncClaudeSkills(badCtx, []);
     expect(result.changed).toHaveLength(0);
+  });
+
+  it('pulls a home-only skill into .claude/skills', async () => {
+    const homeSkills = path.join(tmpDir, 'home', '.agents', 'skills', 'home-skill');
+    await fs.ensureDir(homeSkills);
+    await fs.writeFile(
+      path.join(homeSkills, 'SKILL.md'),
+      '---\nname: home-skill\ndescription: from home\n---\n\nHome content',
+    );
+    const result = await syncClaudeSkills(ctx, []);
+    expect(result.changed).toContain('skills/home-skill');
+    const dest = path.join(tmpDir, '.claude', 'skills', 'home-skill', 'SKILL.md');
+    expect(await fs.pathExists(dest)).toBe(true);
+    expect(await fs.readFile(dest, 'utf8')).toContain('Home content');
+  });
+
+  it('project skill shadows home skill with same dirName', async () => {
+    const homeSkills = path.join(tmpDir, 'home', '.agents', 'skills', 'shared-skill');
+    await fs.ensureDir(homeSkills);
+    await fs.writeFile(
+      path.join(homeSkills, 'SKILL.md'),
+      '---\nname: shared-skill\ndescription: from home\n---\n\nHome wins? no',
+    );
+    const projectSkills = path.join(tmpDir, '.agentstd', 'skills', 'shared-skill');
+    await fs.ensureDir(projectSkills);
+    await fs.writeFile(
+      path.join(projectSkills, 'SKILL.md'),
+      '---\nname: shared-skill\ndescription: from project\n---\n\nProject wins',
+    );
+    const result = await syncClaudeSkills(ctx, []);
+    expect(result.changed).toContain('skills/shared-skill');
+    const dest = path.join(tmpDir, '.claude', 'skills', 'shared-skill', 'SKILL.md');
+    expect(await fs.readFile(dest, 'utf8')).toContain('Project wins');
+  });
+
+  it('syncs both home and project skills when names differ', async () => {
+    const homeSkills = path.join(tmpDir, 'home', '.agents', 'skills', 'home-only');
+    await fs.ensureDir(homeSkills);
+    await fs.writeFile(
+      path.join(homeSkills, 'SKILL.md'),
+      '---\nname: home-only\ndescription: h\n---\n\nH',
+    );
+    const result = await syncClaudeSkills(ctx, []);
+    expect(result.changed).toContain('skills/my-skill');
+    expect(result.changed).toContain('skills/home-only');
   });
 });

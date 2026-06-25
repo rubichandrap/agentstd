@@ -7,7 +7,8 @@ describe('agentStdConfigSchema', () => {
     expect(result.success).toBe(true);
     if (result.success) {
       expect(result.data.targets).toEqual(['claude']);
-      expect(result.data.skills.dir).toBe('.agentstd/skills');
+      expect(result.data.skills.dir).toBe('.agents/skills');
+      expect(result.data.skills.homeDir).toBe('.agents/skills');
     }
   });
 
@@ -27,6 +28,7 @@ describe('agentStdConfigSchema', () => {
       },
       skills: {
         dir: '.agentstd/skills',
+        homeDir: '.agents/skills',
       },
       instructions: {
         shared: '.agentstd/instructions/shared.md',

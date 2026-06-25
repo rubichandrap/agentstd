@@ -24,6 +24,7 @@ describe('Check mode', () => {
   function makeCtx(dryRun = false): SyncContext {
     return {
       projectRoot: tmpDir,
+      homeRoot: path.join(tmpDir, 'home'),
       config: {
         version: 1,
         targets: ['claude'],
@@ -32,7 +33,7 @@ describe('Check mode', () => {
             command: 'node .agentstd/hooks/pretooluse.js',
           },
         },
-        skills: { dir: '.agentstd/skills' },
+        skills: { dir: '.agents/skills', homeDir: '.agents/skills' },
         instructions: {},
       },
       dryRun,
