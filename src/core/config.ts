@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 export const agentStdConfigSchema = z.object({
   version: z.literal(1),
+  projectOnly: z.boolean().default(false),
   targets: z.array(z.string()).default(['claude']),
   hooks: z
     .object({

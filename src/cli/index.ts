@@ -31,6 +31,11 @@ program
   )
   .option('--dry-run', 'Show what would be changed without making changes')
   .option('--check', 'Check if project is fully synced (exit code 1 if changes needed)')
+  .option('--project-only', 'Skip the home layer (~/.agentstd.yaml + ~/.agents/skills/)')
+  .option(
+    '--no-project-only',
+    'Force merge with the home layer (overrides config projectOnly: true)',
+  )
   .action((target, options) => {
     if (options.dryRun && options.check) {
       console.error('Cannot use --dry-run and --check together.');
@@ -39,17 +44,44 @@ program
     syncCmd(target, options);
   });
 
-program.command('doctor').description('Check project state and report issues').action(doctorCmd);
+program
+  .command('doctor')
+  .description('Check project state and report issues')
+  .option('--project-only', 'Skip the home layer (~/.agentstd.yaml + ~/.agents/skills/)')
+  .option(
+    '--no-project-only',
+    'Force merge with the home layer (overrides config projectOnly: true)',
+  )
+  .action((options) => {
+    doctorCmd(options);
+  });
 
 const skillsCmd = program.command('skills').description('Manage skills');
 
-skillsCmd.command('list').description('List all skills').action(skillsListCmd);
+skillsCmd
+  .command('list')
+  .description('List all skills')
+  .option('--project-only', 'Skip the home layer (~/.agentstd.yaml + ~/.agents/skills/)')
+  .option(
+    '--no-project-only',
+    'Force merge with the home layer (overrides config projectOnly: true)',
+  )
+  .action((options) => {
+    skillsListCmd(options);
+  });
 
 skillsCmd
   .command('show')
   .argument('<skillId>', 'Skill identifier to show')
   .description("Show a skill's metadata and content")
-  .action(skillsShowCmd);
+  .option('--project-only', 'Skip the home layer (~/.agentstd.yaml + ~/.agents/skills/)')
+  .option(
+    '--no-project-only',
+    'Force merge with the home layer (overrides config projectOnly: true)',
+  )
+  .action((skillId, options) => {
+    skillsShowCmd(skillId, options);
+  });
 
 const targetsCmd = program.command('targets').description('Manage targets');
 

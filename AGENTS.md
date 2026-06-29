@@ -20,7 +20,7 @@ The project uses an adapter pattern for multi-agent support:
 Key design decisions:
 
 - **Config validation** is centralized in `src/core/config.ts` using Zod. The Zod schema defines `skills.dir` and `skills.homeDir` (both default `.agents/skills`); `AgentStdConfig` is exported as a re-exported `z.infer` so there is one type source of truth (do not duplicate it in `types.ts`).
-- **Layered home + project sources**: `src/core/config-merge.ts` `loadMergedConfig(projectRoot, homeRoot)` deep-merges `~/.agentstd.yaml` under `./.agentstd.yaml` (project scalars win, `targets` array replaced, `version` must match). No home config = project-only (silent, zero behavior change). Hooks/instructions replace by filename (project wins); skills union with project shadowing home by `dirName`. `src/core/skill-resolve.ts` `resolveSkillSources()` returns the ordered `[home, project]` sources; `listMergedSkills()` dedups by `dirName` keeping the project copy, tagging each `SkillMeta` with `source: 'home' | 'project'`.
+- **Layered home + project sources**: `src/core/config-merge.ts` `loadMergedConfig(projectRoot, homeRoot, flagProjectOnly?)` deep-merges `~/.agentstd.yaml` under `./.agentstd.yaml` (project scalars win, `targets` array replaced, `version` must match). No home config = project-only (silent, zero behavior change). Hooks/instructions replace by filename (project wins); skills union with project shadowing home by `dirName`. When `projectOnly: true` (config) or the `--project-only` flag (overrides config either direction; `--no-project-only` forces merge), `loadMergedConfig` skips reading `~/.agentstd.yaml` and validates the project config standalone; the returned `config.projectOnly` reflects the effective setting so downstream consumers see the same flag value. `src/core/skill-resolve.ts` `resolveSkillSources()` returns the ordered `[home, project]` sources when projectOnly is false, or `[project]` only when true; `listMergedSkills()` dedups by `dirName` keeping the project copy, tagging each `SkillMeta` with `source: 'home' | 'project'`.
 - **Home root**: `src/core/paths.ts` `homeRoot()` returns `process.env.AGENTSTD_HOME ?? os.homedir()`. All home path helpers (`homeAgentStdConfigPath`, `homeHooksDir`, `homeInstructionsDir`, `homeAgentsSkillsDir`) derive from it. `AGENTSTD_HOME` is the seam used by tests for hermetic isolation.
 - **Adapter interface** (`src/core/types.ts`) defines `sync()`, `doctor()`, and `detect()` methods; `SyncContext`/`DoctorContext` carry an optional `homeRoot` so adapters can resolve home skills/hooks. New agents are added by implementing this interface and registering in the adapters map in `src/cli/commands/sync.ts` and `src/cli/commands/doctor.ts`.
 - **Settings merge** is idempotent: Claude's `settings.json` is read, existing non-AgentStd hooks are preserved, and the AgentStd hook is upserted by detecting its command string pattern. `needsSettingsUpdate()` compares computed vs current hooks to avoid unnecessary writes.
@@ -36,10 +36,12 @@ Key design decisions:
 - `pnpm build` — compile to `dist/` with tsup (ESM + DTS)
 - `pnpm test` — run all vitest tests
 - `pnpm typecheck` — TypeScript validation only
-- Smoke test: `cd /tmp && mkdir test && cd test && node /path/to/dist/index.js init && node /path/to/dist/index.js sync --dry-run && node /path/to/dist/index.js sync && node /path/to/dist/index.js doctor`
+- Smoke test: `cd /tmp && mkdir test && cd test && node /path/to/dist/index.js init && node /path/to/dist/index.js sync --dry-run && node /path/to/dist/index.js sync && node /path/to/dist/index.js doctor` (also try `--project-only` on each)
+- `agentstd init --global` — seeds `~/.agentstd.yaml`, `~/.agentstd/hooks/pretooluse.js`, and `~/.agents/skills/` (refuses to overwrite; project `init` never touches `$HOME`).
 - `agentstd sync [target]` — syncs all targets or a specific one (e.g. `claude`). The optional target argument filters to a single agent.
 - `agentstd sync --dry-run` — previews planned `FileOperation[]` without writing any files.
 - `agentstd sync --check` — exits 0 if synced, 1 if changes needed (for CI/CD). Mutually exclusive with `--dry-run`.
+- `agentstd sync --project-only` — skips the home layer (`~/.agentstd.yaml` + `~/.agents/skills/` + home hooks/instructions). Also available on `doctor` and `skills list/show`. `--no-project-only` forces the merge even when `.agentstd.yaml` has `projectOnly: true` (flag wins either direction).
 
 **Adding a new adapter:**
 1. Create `src/adapters/<agent>/` with `index.ts`, `sync.ts`, `doctor.ts`

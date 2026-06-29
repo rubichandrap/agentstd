@@ -61,10 +61,28 @@ function checkVersionAgreement(
 export async function loadMergedConfig(
   projectRoot: string,
   homeRoot: string,
+  flagProjectOnly?: boolean,
 ): Promise<MergedConfigResult> {
   const projectPath = path.join(projectRoot, '.agentstd.yaml');
   if (!(await fileExists(projectPath))) {
     throw new Error(`.agentstd.yaml not found at ${projectPath}. Run: agentstd init`);
+  }
+
+  const projectRead = await readYamlObject(projectPath);
+
+  const rawProjectOnly = isPlainObject(projectRead.object)
+    ? projectRead.object.projectOnly
+    : undefined;
+  const effectiveProjectOnly =
+    flagProjectOnly !== undefined ? flagProjectOnly : rawProjectOnly === true;
+
+  if (effectiveProjectOnly) {
+    const validation = agentStdConfigSchema.safeParse(projectRead.object);
+    if (!validation.success) {
+      throw new ConfigValidationError(projectPath, validation.error.issues);
+    }
+    const config = { ...validation.data, projectOnly: true };
+    return { config, sources: [projectPath] };
   }
 
   const homePath = path.join(homeRoot, '.agentstd.yaml');
@@ -72,7 +90,6 @@ export async function loadMergedConfig(
 
   const homeRead = await readYamlObject(homePath);
   if (homeRead.found) sources.push(homePath);
-  const projectRead = await readYamlObject(projectPath);
   sources.push(projectPath);
 
   if (!homeRead.found) {
@@ -91,7 +108,9 @@ export async function loadMergedConfig(
     throw new ConfigValidationError(projectPath, validation.error.issues);
   }
 
-  return { config: validation.data, sources };
+  const config =
+    flagProjectOnly === false ? { ...validation.data, projectOnly: false } : validation.data;
+  return { config, sources };
 }
 
 export class ConfigValidationError extends Error {

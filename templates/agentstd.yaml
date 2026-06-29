@@ -1,5 +1,7 @@
 version: 1
 
+# projectOnly: false  # set true to skip ~/.agentstd.yaml + ~/.agents/skills/ (CLI: --project-only)
+
 targets:
   - claude
 

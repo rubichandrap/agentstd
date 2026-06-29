@@ -9,7 +9,11 @@ import { homeRoot } from '../../core/paths';
 import { listMergedSkills } from '../../core/skill';
 import { resolveSkillSources } from '../../core/skill-resolve';
 
-async function loadSkillSets() {
+export interface SkillsOptions {
+  projectOnly?: boolean;
+}
+
+async function loadSkillSets(options?: SkillsOptions) {
   const root = process.cwd();
   const configPath = path.join(root, '.agentstd.yaml');
   if (!(await fileExists(configPath))) {
@@ -17,7 +21,7 @@ async function loadSkillSets() {
     process.exit(1);
   }
   try {
-    const { config } = await loadMergedConfig(root, homeRoot());
+    const { config } = await loadMergedConfig(root, homeRoot(), options?.projectOnly);
     const sources = resolveSkillSources(root, config, homeRoot());
     const skills = await listMergedSkills(sources);
     return { config, sources, skills };
@@ -34,8 +38,8 @@ async function loadSkillSets() {
   }
 }
 
-export async function skillsListCmd(): Promise<void> {
-  const { skills } = await loadSkillSets();
+export async function skillsListCmd(options?: SkillsOptions): Promise<void> {
+  const { skills } = await loadSkillSets(options);
 
   if (skills.length === 0) {
     log.dim('No skills found.');
@@ -54,8 +58,8 @@ export async function skillsListCmd(): Promise<void> {
   }
 }
 
-export async function skillsShowCmd(skillId: string): Promise<void> {
-  const { skills } = await loadSkillSets();
+export async function skillsShowCmd(skillId: string, options?: SkillsOptions): Promise<void> {
+  const { skills } = await loadSkillSets(options);
 
   const skill = skills.find((s) => s.dirName === skillId);
   if (!skill) {

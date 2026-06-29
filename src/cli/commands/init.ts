@@ -67,6 +67,7 @@ async function createProjectDefaults(
   // .agentstd.yaml
   const config = {
     version: 1,
+    projectOnly: false,
     targets: ['claude'],
     hooks: {
       preToolUse: {

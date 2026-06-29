@@ -98,4 +98,48 @@ describe('loadMergedConfig', () => {
     expect(config.skills.dir).toBe('.agents/skills');
     expect(config.skills.homeDir).toBe('.agents/skills');
   });
+
+  describe('projectOnly', () => {
+    it('project config projectOnly: true skips home even when home exists', async () => {
+      await writeHomeConfig({
+        version: 1,
+        targets: ['claude', 'opencode'],
+        hooks: { preToolUse: { command: 'node ~/.agentstd/hooks/pretooluse.js' } },
+      });
+      await writeProjectConfig({
+        version: 1,
+        projectOnly: true,
+        targets: ['claude'],
+      });
+      const { config, sources } = await loadMergedConfig(projectDir, homeDir);
+      expect(config.projectOnly).toBe(true);
+      expect(config.targets).toEqual(['claude']);
+      expect(sources).toHaveLength(1);
+      expect(sources[0]).toBe(path.join(projectDir, '.agentstd.yaml'));
+    });
+
+    it('flag projectOnly=true overrides config projectOnly: false', async () => {
+      await writeHomeConfig({ version: 1, targets: ['claude', 'opencode'] });
+      await writeProjectConfig({ version: 1, projectOnly: false, targets: ['claude'] });
+      const { config, sources } = await loadMergedConfig(projectDir, homeDir, true);
+      expect(config.projectOnly).toBe(true);
+      expect(sources).toHaveLength(1);
+    });
+
+    it('flag projectOnly=false overrides config projectOnly: true (forces home merge)', async () => {
+      await writeHomeConfig({ version: 1, targets: ['claude', 'opencode'] });
+      await writeProjectConfig({ version: 1, projectOnly: true, targets: ['claude'] });
+      const { config, sources } = await loadMergedConfig(projectDir, homeDir, false);
+      expect(config.projectOnly).toBe(false);
+      expect(config.targets).toEqual(['claude']);
+      expect(sources).toHaveLength(2);
+    });
+
+    it('projectOnly: true in project avoids version-mismatch check against home', async () => {
+      await writeHomeConfig({ version: 2 });
+      await writeProjectConfig({ version: 1, projectOnly: true });
+      const { config } = await loadMergedConfig(projectDir, homeDir);
+      expect(config.version).toBe(1);
+    });
+  });
 });

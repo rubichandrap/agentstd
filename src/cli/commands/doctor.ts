@@ -28,7 +28,7 @@ function statusIcon(status: DoctorCheck['status']): string {
   }
 }
 
-export async function doctorCmd(): Promise<void> {
+export async function doctorCmd(options?: { projectOnly?: boolean }): Promise<void> {
   const root = process.cwd();
   const configPath = path.join(root, '.agentstd.yaml');
 
@@ -46,13 +46,21 @@ export async function doctorCmd(): Promise<void> {
 
   let configValid = false;
   let config = null;
+  let isProjectOnly = false;
   try {
-    const merged = await loadMergedConfig(root, homeRoot());
+    const merged = await loadMergedConfig(root, homeRoot(), options?.projectOnly);
     config = merged.config;
     configValid = true;
-    log.success('config valid');
-    if (merged.sources.length > 1) {
-      log.dim(`  merged from: ${merged.sources.map((s) => s.replace(homeRoot(), '~')).join(', ')}`);
+    isProjectOnly = config.projectOnly;
+    if (isProjectOnly) {
+      log.success('config valid (project-only mode)');
+    } else {
+      log.success('config valid');
+      if (merged.sources.length > 1) {
+        log.dim(
+          `  merged from: ${merged.sources.map((s) => s.replace(homeRoot(), '~')).join(', ')}`,
+        );
+      }
     }
   } catch (err) {
     if (err instanceof ConfigValidationError) {
@@ -66,7 +74,8 @@ export async function doctorCmd(): Promise<void> {
   }
 
   const projectHookExists = await fileExists(path.join(hooksDir(root), 'pretooluse.js'));
-  const homeHookExists = await fileExists(path.join(homeHooksDir(), 'pretooluse.js'));
+  const homeHookExists =
+    !isProjectOnly && (await fileExists(path.join(homeHooksDir(), 'pretooluse.js')));
   if (projectHookExists) {
     log.success('preToolUse hook found (project)');
   } else if (homeHookExists) {
@@ -80,25 +89,27 @@ export async function doctorCmd(): Promise<void> {
     const skDir = path.resolve(root, config.skills.dir);
     if (await fileExists(skDir)) {
       log.success('project skills directory found');
-    } else {
+    } else if (!isProjectOnly) {
       log.warn('project skills directory not found');
       log.dim('  Merged skills will pull from home only');
     }
   }
 
-  // Home checks
-  log.info(`\n${pc.bold('Home')}`);
-  const homeConfigExists = await fileExists(homeAgentStdConfigPath());
-  if (homeConfigExists) {
-    log.success('home .agentstd.yaml found');
-  } else {
-    log.dim('home config not found (project-only mode)');
-  }
-  const homeSkills = await readDir(homeAgentsSkillsDir());
-  if (homeSkills.length > 0) {
-    log.success(`${homeSkills.length} home skill(s) available`);
-  } else {
-    log.dim('no home skills found at ~/.agents/skills');
+  // Home checks — skipped in project-only mode
+  if (!isProjectOnly) {
+    log.info(`\n${pc.bold('Home')}`);
+    const homeConfigExists = await fileExists(homeAgentStdConfigPath());
+    if (homeConfigExists) {
+      log.success('home .agentstd.yaml found');
+    } else {
+      log.dim('home config not found (project-only mode will apply automatically)');
+    }
+    const homeSkills = await readDir(homeAgentsSkillsDir());
+    if (homeSkills.length > 0) {
+      log.success(`${homeSkills.length} home skill(s) available`);
+    } else {
+      log.dim('no home skills found at ~/.agents/skills');
+    }
   }
 
   if (!configValid || !config) {

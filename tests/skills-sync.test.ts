@@ -102,4 +102,22 @@ describe('Claude skills sync', () => {
     expect(result.changed).toContain('skills/my-skill');
     expect(result.changed).toContain('skills/home-only');
   });
+
+  it('projectOnly: true prevents home skills from syncing', async () => {
+    const homeSkills = path.join(tmpDir, 'home', '.agents', 'skills', 'home-skill');
+    await fs.ensureDir(homeSkills);
+    await fs.writeFile(
+      path.join(homeSkills, 'SKILL.md'),
+      '---\nname: home-skill\ndescription: from home\n---\n\nShould NOT sync',
+    );
+    const projectOnlyCtx: SyncContext = {
+      ...ctx,
+      config: { ...ctx.config, projectOnly: true },
+    };
+    const result = await syncClaudeSkills(projectOnlyCtx, []);
+    expect(result.changed).toContain('skills/my-skill');
+    expect(result.changed).not.toContain('skills/home-skill');
+    const dest = path.join(tmpDir, '.claude', 'skills', 'home-skill', 'SKILL.md');
+    expect(await fs.pathExists(dest)).toBe(false);
+  });
 });

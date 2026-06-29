@@ -19,6 +19,7 @@ export interface SyncOptions {
   target?: string;
   dryRun?: boolean;
   check?: boolean;
+  projectOnly?: boolean;
 }
 
 function printOperations(operations: FileOperation[]): void {
@@ -73,9 +74,11 @@ export async function syncCmd(target?: string, options?: Record<string, unknown>
     process.exit(1);
   }
 
+  const flagProjectOnly = (options as SyncOptions)?.projectOnly;
+
   let merged: MergedConfigResult | undefined;
   try {
-    merged = await loadMergedConfig(root, homeRoot());
+    merged = await loadMergedConfig(root, homeRoot(), flagProjectOnly);
   } catch (err) {
     if (err instanceof ConfigValidationError) {
       log.error(`Invalid config:`);

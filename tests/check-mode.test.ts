@@ -74,4 +74,18 @@ describe('Check mode', () => {
     await claudeSync(ctx);
     expect(await fs.pathExists(settingsPath)).toBe(false);
   });
+
+  it('projectOnly: true skips home skill in sync plan', async () => {
+    await setupInit();
+    const homeSkills = path.join(tmpDir, 'home', '.agents', 'skills', 'home-only');
+    await fs.ensureDir(homeSkills);
+    await fs.writeFile(
+      path.join(homeSkills, 'SKILL.md'),
+      '---\nname: home-only\ndescription: h\n---\n\nH',
+    );
+    const ctx = makeCtx(true);
+    (ctx.config as Record<string, unknown>).projectOnly = true;
+    const result = await claudeSync(ctx);
+    expect(result.changed).not.toContain('skills/home-only');
+  });
 });

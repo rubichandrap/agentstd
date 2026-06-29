@@ -20,7 +20,7 @@ When using multiple AI coding agents (Claude Code, OpenCode, CommandCode, Pi, et
 
 ## Installation
 
-After the first npm release:
+[![npm version](https://img.shields.io/npm/v/agentstd.svg)](https://www.npmjs.com/package/agentstd)
 
 ```bash
 pnpm add -g agentstd
@@ -28,6 +28,8 @@ pnpm add -g agentstd
 # or
 npm install -g agentstd
 ```
+
+Package on npm: <https://www.npmjs.com/package/agentstd>
 
 ### From source
 
@@ -99,6 +101,14 @@ Merge rules:
 - **Hooks / instructions**: a project file fully replaces a home file by filename.
 - **No home config**: behaves as project-only (zero behavior change).
 
+### Project-only mode
+
+Skip the home layer entirely (no `~/.agentstd.yaml` merge, no `~/.agents/skills/` pull, no home hooks/instructions) — useful for CI or hermetic repos:
+
+- **Persistent**: set `projectOnly: true` in `.agentstd.yaml`.
+- **One-off flag**: `agentstd sync --project-only` (forces ON), or `agentstd sync --no-project-only` (forces OFF, overrides config).
+- Applies uniformly to `sync`, `doctor`, and `skills list/show`.
+
 ### `agentstd sync`
 
 Reads `.agentstd.yaml` and syncs configuration to target agent's folder.
@@ -115,6 +125,12 @@ agentstd sync --dry-run
 
 # Check if project is fully synced (exit code 1 if changes needed)
 agentstd sync --check
+
+# Skip the home layer (~/.agentstd.yaml + ~/.agents/skills/)
+agentstd sync --project-only
+
+# Force home merge (overrides projectOnly: true in config)
+agentstd sync --no-project-only
 ```
 
 For Claude, this:
@@ -129,16 +145,18 @@ For Claude, this:
 Checks the current project state and prints a readable report. Verifies:
 
 - `.agentstd.yaml` exists and is valid
-- Hook and skills directories exist
+- Hook and skills directories exist (project + home, unless `--project-only`)
 - Each target agent's config is correctly synced
+
+`--project-only` hides the Home section and skips `~/.agentstd.yaml` checks.
 
 ### `agentstd skills list`
 
-Lists all skills from your standard skill directory with name and description.
+Lists all skills with name, description, and a `[home]`/`[project]` source tag. Use `--project-only` to list only project skills (no home library).
 
 ### `agentstd skills show <skillId>`
 
-Shows a skill's full metadata and content.
+Shows a skill's full metadata and content, with its source (`home` or `project`). Use `--project-only` to restrict resolution to project skills only.
 
 ### `agentstd targets list`
 

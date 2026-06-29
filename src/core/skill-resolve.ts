@@ -7,16 +7,22 @@ export function resolveSkillSources(
   config: AgentStdConfig,
   homeRoot: string,
 ): SkillSource[] {
+  const projectSource: SkillSource = {
+    root: projectRoot,
+    dir: path.resolve(projectRoot, config.skills.dir),
+    label: 'project',
+  };
+
+  if (config.projectOnly) {
+    return [projectSource];
+  }
+
   return [
     {
       root: homeRoot,
       dir: path.join(homeRoot, config.skills.homeDir),
       label: 'home',
     },
-    {
-      root: projectRoot,
-      dir: path.resolve(projectRoot, config.skills.dir),
-      label: 'project',
-    },
+    projectSource,
   ];
 }
