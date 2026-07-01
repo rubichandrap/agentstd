@@ -54,11 +54,13 @@ describe('init --global', () => {
     expect(raw).not.toContain('~');
   });
 
-  it('refuses to overwrite an existing home config', async () => {
+  it('leaves an up-to-date home config unchanged on re-init', async () => {
     await initCmd({ global: true });
     const first = await fs.readFile(path.join(homeDir, '.agentstd.yaml'), 'utf8');
     await initCmd({ global: true });
     const second = await fs.readFile(path.join(homeDir, '.agentstd.yaml'), 'utf8');
     expect(second).toBe(first);
+    // No backup is written when nothing needed upgrading.
+    expect(await fs.pathExists(path.join(homeDir, '.agentstd.yaml.bak'))).toBe(false);
   });
 });

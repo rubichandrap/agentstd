@@ -33,10 +33,19 @@ export interface DoctorContext {
   homeRoot?: string;
 }
 
+export interface RemoveContext {
+  projectRoot: string;
+  config: AgentStdConfig;
+  dryRun?: boolean;
+  homeRoot?: string;
+}
+
 export type FileOperation =
   | { type: 'create-dir'; dir: string }
   | { type: 'create-file'; path: string }
   | { type: 'update-file'; path: string }
+  | { type: 'remove-file'; path: string }
+  | { type: 'remove-dir'; path: string }
   | { type: 'copy-dir'; from: string; to: string }
   | { type: 'skip'; description: string; reason: string };
 
@@ -58,6 +67,13 @@ export interface DoctorResult {
   checks: DoctorCheck[];
 }
 
+export interface RemoveResult {
+  target: string;
+  removed: string[];
+  warnings: string[];
+  operations: FileOperation[];
+}
+
 export interface AgentAdapter {
   id: string;
   name: string;
@@ -66,4 +82,5 @@ export interface AgentAdapter {
   detect(projectRoot: string): Promise<boolean>;
   sync(ctx: SyncContext): Promise<SyncResult>;
   doctor(ctx: DoctorContext): Promise<DoctorResult>;
+  remove(ctx: RemoveContext): Promise<RemoveResult>;
 }

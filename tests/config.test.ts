@@ -12,9 +12,14 @@ describe('agentStdConfigSchema', () => {
     }
   });
 
-  it('rejects invalid version', () => {
-    const result = agentStdConfigSchema.safeParse({ version: 2 });
-    expect(result.success).toBe(false);
+  it('rejects a non-positive or non-integer version', () => {
+    expect(agentStdConfigSchema.safeParse({ version: 0 }).success).toBe(false);
+    expect(agentStdConfigSchema.safeParse({ version: 1.5 }).success).toBe(false);
+    expect(agentStdConfigSchema.safeParse({ version: 'one' }).success).toBe(false);
+  });
+
+  it('accepts future integer versions at the schema layer (migrations own the range)', () => {
+    expect(agentStdConfigSchema.safeParse({ version: 2 }).success).toBe(true);
   });
 
   it('parses full config', () => {

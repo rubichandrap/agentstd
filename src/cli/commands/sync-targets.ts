@@ -1,7 +1,5 @@
-import readline from 'node:readline/promises';
+import * as clack from '@clack/prompts';
 import type { AgentStdConfig } from '../../core/types';
-
-export type SyncTargetChoice = string | 'all';
 
 export interface ResolveSyncTargetsOptions {
   requestedTarget?: string;
@@ -9,7 +7,7 @@ export interface ResolveSyncTargetsOptions {
   check?: boolean;
   dryRun?: boolean;
   isInteractive?: boolean;
-  promptTarget?: (targets: string[]) => Promise<SyncTargetChoice>;
+  promptTargets?: (targets: string[]) => Promise<string[]>;
 }
 
 export async function resolveSyncTargets(
@@ -22,33 +20,21 @@ export async function resolveSyncTargets(
   if (config.targets.length <= 1) return config.targets;
   if (!options.isInteractive) return config.targets;
 
-  const choice = await (options.promptTarget ?? promptForTarget)(config.targets);
-  return choice === 'all' ? config.targets : [choice];
+  return (options.promptTargets ?? promptForTargets)(config.targets);
 }
 
-async function promptForTarget(targets: string[]): Promise<SyncTargetChoice> {
-  const choices = ['all', ...targets];
-  console.log('Select target to sync:');
-  choices.forEach((choice, index) => {
-    console.log(`  ${index + 1}. ${choice === 'all' ? 'All targets' : choice}`);
+async function promptForTargets(targets: string[]): Promise<string[]> {
+  const selected = await clack.multiselect({
+    message: 'Select targets to sync',
+    options: targets.map((target) => ({ value: target, label: target })),
+    initialValues: [...targets],
+    required: true,
   });
 
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
-
-  try {
-    const answer = await rl.question('Target: ');
-    const index = Number.parseInt(answer.trim(), 10);
-    if (Number.isInteger(index) && index >= 1 && index <= choices.length) {
-      return choices[index - 1];
-    }
-    if (choices.includes(answer.trim())) {
-      return answer.trim();
-    }
-    return 'all';
-  } finally {
-    rl.close();
+  if (clack.isCancel(selected) || selected.length === 0) {
+    clack.cancel('Sync cancelled.');
+    process.exit(0);
   }
+
+  return selected;
 }

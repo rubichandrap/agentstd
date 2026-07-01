@@ -39,7 +39,7 @@ const agentConfigSchema = z.object({
 });
 
 export const agentStdConfigSchema = z.object({
-  version: z.literal(1),
+  version: z.number().int().positive(),
   projectOnly: z.boolean().default(false),
   targets: z.array(z.string()).default(['claude']),
   hooks: z

@@ -15,7 +15,7 @@ describe('resolveSyncTargets', () => {
     const targets = await resolveSyncTargets(config, {
       requestedTarget: 'codex',
       isInteractive: true,
-      promptTarget: async () => 'claude',
+      promptTargets: async () => ['claude'],
     });
 
     expect(targets).toEqual(['codex']);
@@ -25,7 +25,7 @@ describe('resolveSyncTargets', () => {
     const targets = await resolveSyncTargets(config, {
       all: true,
       isInteractive: true,
-      promptTarget: async () => 'claude',
+      promptTargets: async () => ['claude'],
     });
 
     expect(targets).toEqual(['claude', 'codex']);
@@ -36,7 +36,7 @@ describe('resolveSyncTargets', () => {
       { ...config, targets: ['claude'] },
       {
         isInteractive: true,
-        promptTarget: async () => {
+        promptTargets: async () => {
           throw new Error('prompt should not run');
         },
       },
@@ -48,25 +48,37 @@ describe('resolveSyncTargets', () => {
   it('preserves sync-all behavior for non-interactive terminals', async () => {
     const targets = await resolveSyncTargets(config, {
       isInteractive: false,
-      promptTarget: async () => 'claude',
+      promptTargets: async () => ['claude'],
     });
 
     expect(targets).toEqual(['claude', 'codex']);
   });
 
-  it('uses the prompted target when multiple targets are interactive', async () => {
+  it('syncs only the targets selected in the interactive prompt', async () => {
     const targets = await resolveSyncTargets(config, {
       isInteractive: true,
-      promptTarget: async () => 'codex',
+      promptTargets: async () => ['codex'],
     });
 
     expect(targets).toEqual(['codex']);
   });
 
-  it('syncs all targets when the prompt selects all', async () => {
+  it('syncs every selected target when the prompt picks all', async () => {
     const targets = await resolveSyncTargets(config, {
       isInteractive: true,
-      promptTarget: async () => 'all',
+      promptTargets: async () => ['claude', 'codex'],
+    });
+
+    expect(targets).toEqual(['claude', 'codex']);
+  });
+
+  it('skips prompting in check/dry-run modes', async () => {
+    const targets = await resolveSyncTargets(config, {
+      check: true,
+      isInteractive: true,
+      promptTargets: async () => {
+        throw new Error('prompt should not run');
+      },
     });
 
     expect(targets).toEqual(['claude', 'codex']);

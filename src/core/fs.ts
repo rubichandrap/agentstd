@@ -34,3 +34,23 @@ export async function readDir(dir: string): Promise<string[]> {
   const entries = await fs.readdir(dir, { withFileTypes: true });
   return entries.filter((e) => e.isDirectory()).map((e) => e.name);
 }
+
+/**
+ * Writes `obj` to `filePath` as YAML, backing up the previous content to
+ * `${filePath}.bak` first. Returns the backup path (or null when the file did
+ * not previously exist and no backup was written).
+ */
+export async function writeConfigWithBackup(
+  filePath: string,
+  obj: unknown,
+): Promise<string | null> {
+  const YAML = await import('yaml');
+  if (await fileExists(filePath)) {
+    const bak = `${filePath}.bak`;
+    await fs.copy(filePath, bak, { overwrite: true });
+    await fs.writeFile(filePath, YAML.stringify(obj));
+    return bak;
+  }
+  await fs.writeFile(filePath, YAML.stringify(obj));
+  return null;
+}

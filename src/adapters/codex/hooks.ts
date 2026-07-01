@@ -89,7 +89,7 @@ export async function hasCodexPreToolUseHookSynced(
   );
 }
 
-function isAgentStdHook(hook: CodexHook): boolean {
+export function isAgentStdHook(hook: CodexHook): boolean {
   if (hook._agentstd === AGENTSTD_HOOK_ID) return true;
   return hook.hooks.some((entry) => entry.command.includes('agentstd/hooks/pretooluse'));
 }

@@ -35,7 +35,7 @@ function buildAgentStdHook(config: AgentStdConfig): ClaudeHook {
   return hook;
 }
 
-function isAgentStdHook(hook: ClaudeHook): boolean {
+export function isAgentStdHook(hook: ClaudeHook): boolean {
   if (hook._agentstd === AGENTSTD_HOOK_ID) return true;
   const cmd = (hook.hooks?.[0] as ClaudeHookEntry | undefined)?.command ?? '';
   return cmd.includes('agentstd/hooks/pretooluse');

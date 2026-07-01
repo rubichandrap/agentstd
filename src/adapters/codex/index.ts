@@ -2,6 +2,7 @@ import { fileExists } from '../../core/fs';
 import { agentsMdPath, codexConfigPath, codexHooksPath } from '../../core/paths';
 import type { AgentAdapter } from '../../core/types';
 import { doctor } from './doctor';
+import { remove } from './remove';
 import { sync } from './sync';
 
 export const codexAdapter: AgentAdapter = {
@@ -26,4 +27,5 @@ export const codexAdapter: AgentAdapter = {
 
   sync,
   doctor,
+  remove,
 };

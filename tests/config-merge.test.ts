@@ -69,10 +69,10 @@ describe('loadMergedConfig', () => {
     expect(config.targets).toEqual(['claude']);
   });
 
-  it('throws on version mismatch between home and project', async () => {
+  it('throws when a config declares a newer-than-supported version', async () => {
     await writeHomeConfig({ version: 2 });
     await writeProjectConfig({ version: 1 });
-    await expect(loadMergedConfig(projectDir, homeDir)).rejects.toThrow(/version mismatch/i);
+    await expect(loadMergedConfig(projectDir, homeDir)).rejects.toThrow(/newer than this/i);
   });
 
   it('throws when project .agentstd.yaml missing', async () => {

@@ -6,6 +6,8 @@ import { skillsListCmd, skillsShowCmd } from './commands/skills';
 import { statusCmd } from './commands/status';
 import { syncCmd } from './commands/sync';
 import { targetsListCmd } from './commands/targets';
+import { targetsAddCmd, targetsRemoveCmd } from './commands/targets-mutate';
+import { uninstallCmd } from './commands/uninstall';
 
 export interface ProgramCommands {
   doctorCmd?: typeof doctorCmd;
@@ -15,6 +17,9 @@ export interface ProgramCommands {
   statusCmd?: typeof statusCmd;
   syncCmd?: typeof syncCmd;
   targetsListCmd?: typeof targetsListCmd;
+  targetsAddCmd?: typeof targetsAddCmd;
+  targetsRemoveCmd?: typeof targetsRemoveCmd;
+  uninstallCmd?: typeof uninstallCmd;
 }
 
 export function createProgram(commands: ProgramCommands = {}): Command {
@@ -26,6 +31,9 @@ export function createProgram(commands: ProgramCommands = {}): Command {
     statusCmd,
     syncCmd,
     targetsListCmd,
+    targetsAddCmd,
+    targetsRemoveCmd,
+    uninstallCmd,
     ...commands,
   };
 
@@ -45,8 +53,20 @@ export function createProgram(commands: ProgramCommands = {}): Command {
       '--global',
       'Initialize home-level AgentStd config (~/.agentstd.yaml + ~/.agents/skills/)',
     )
+    .option('--force', 'Reset an existing .agentstd.yaml to defaults (writes a .bak backup)')
+    .option('--dry-run', 'Show what an upgrade of an existing .agentstd.yaml would change')
+    .option('--no-interactive', 'Skip the target-selection prompt and use defaults')
+    .option(
+      '-t, --target <id>',
+      'Pre-select a target (repeatable). Skips the prompt when at least one is given.',
+      collectRepeatable,
+      [] as string[],
+    )
     .action((options) => {
-      handlers.initCmd(options);
+      handlers.initCmd({
+        ...options,
+        targets: options.target,
+      });
     });
 
   program
@@ -72,6 +92,19 @@ export function createProgram(commands: ProgramCommands = {}): Command {
 
   addCheckCommand(program, 'doctor', 'Check project state and report issues', handlers.doctorCmd);
   addCheckCommand(program, 'check', 'Verify project state and report issues', handlers.doctorCmd);
+
+  program
+    .command('uninstall [target]')
+    .description('Remove AgentStd provider artifacts and config from the current project')
+    .option('--all', 'Uninstall every configured target')
+    .option('--dry-run', 'Show what would be removed without making changes')
+    .option('--purge-skills', 'Also remove .agents/skills/ (left in place by default)')
+    .option('--project-only', 'Only purge the project layer, not the home layer')
+    .option('--no-project-only', 'Force include the home layer')
+    .option('--global', 'Purge the home config (~/.agentstd.yaml) instead of the project config')
+    .action((target, options) => {
+      handlers.uninstallCmd(target, options);
+    });
 
   program
     .command('status')
@@ -136,6 +169,22 @@ export function createProgram(commands: ProgramCommands = {}): Command {
       handlers.targetsListCmd();
     });
 
+  targetsCmd
+    .command('add [id]')
+    .description('Add a target to .agentstd.yaml (prompts when [id] is omitted in a TTY)')
+    .option('--global', 'Modify the home config (~/.agentstd.yaml) instead of the project config')
+    .action((id, options) => {
+      handlers.targetsAddCmd(id, options);
+    });
+
+  targetsCmd
+    .command('remove [id]')
+    .description('Remove a target from .agentstd.yaml (prompts when [id] is omitted in a TTY)')
+    .option('--global', 'Modify the home config (~/.agentstd.yaml) instead of the project config')
+    .action((id, options) => {
+      handlers.targetsRemoveCmd(id, options);
+    });
+
   return program;
 }
 
@@ -156,4 +205,8 @@ function addCheckCommand(
     .action((options) => {
       handler(options);
     });
+}
+
+function collectRepeatable(value: string, previous: string[]): string[] {
+  return [...previous, value];
 }

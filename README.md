@@ -58,6 +58,9 @@ agentstd status
 
 # Verify everything is healthy
 agentstd check
+
+# Preview removing AgentStd (non-destructive)
+agentstd uninstall --all --dry-run
 ```
 
 ## Commands
@@ -71,6 +74,18 @@ Creates the base AgentStd project structure:
 - `.agents/skills/example-skill/SKILL.md` — example shared skill (`.agents/skills` is the source of truth)
 - `.agentstd/instructions/shared.md` — shared instructions
 
+In an interactive terminal, `init` prompts you to pick agent targets via a multiselect (Claude is preselected). Skip the prompt with `--no-interactive` or pre-select targets with a repeatable `-t/--target <id>`:
+
+```bash
+# Non-interactive, pre-select both adapters
+agentstd init --no-interactive --target claude --target codex
+```
+
+Re-running `init` on an existing `.agentstd.yaml` is an **upgrade**, not an overwrite: it runs config migrations and backfills any newly-added default keys, writing a `.bak` backup first (comments are not preserved — the backup mitigates this). Your existing `targets` are preserved and you are never re-prompted.
+
+- `--force` — reset an existing config to defaults (writes a `.bak` backup first).
+- `--dry-run` — preview what an upgrade would change without writing.
+
 ### `agentstd init --global`
 
 Seeds a **home-level** AgentStd config so a shared skill library lives across all your projects:
@@ -79,7 +94,7 @@ Seeds a **home-level** AgentStd config so a shared skill library lives across al
 - `~/.agentstd/hooks/pretooluse.js` — home hook (shadowed by a project hook of the same name)
 - `~/.agents/skills/` — home skill library (drop skills like Caveman here; they sync into every project)
 
-`AGENTSTD_HOME` overrides the home location (useful for testing or non-standard `$HOME`).
+`AGENTSTD_HOME` overrides the home location (useful for testing or non-standard `$HOME`). Re-running `init --global` upgrades an existing home config in place (same migration + backfill + `.bak` flow as project `init`); `--force` resets and `--dry-run` previews.
 
 ## Home and project layers
 
@@ -99,7 +114,7 @@ AgentStd layers home and project sources exactly like Claude (`~/.claude` + `.cl
 
 Merge rules:
 
-- **Config**: project `./.agentstd.yaml` is deep-merged over `~/.agentstd.yaml`. Project scalars win; `targets` is replaced (not concatenated); `version` must match across both.
+- **Config**: project `./.agentstd.yaml` is deep-merged over `~/.agentstd.yaml`. Project scalars win; `targets` is replaced (not concatenated). Each layer's `version` is migrated to the current build's version independently; a config version newer than your installed AgentStd throws (upgrade AgentStd to resolve).
 - **Skills**: union of `~/.agents/skills/` and `./.agents/skills/`. A project skill with the same id shadows the home one.
 - **Hooks / instructions**: a project file fully replaces a home file by filename.
 - **No home config**: behaves as project-only (zero behavior change).
@@ -159,7 +174,7 @@ For Codex, this:
 - Writes command permission rules to `.codex/rules/agentstd.rules`
 - Writes AgentStd agents to `.codex/agents/`
 
-If multiple targets are configured and the terminal is interactive, `agentstd sync` asks which target to sync. In CI/non-interactive mode, `agentstd sync` keeps the current behavior and syncs all configured targets.
+If multiple targets are configured and the terminal is interactive, `agentstd sync` shows a multiselect with all targets preselected. In CI/non-interactive mode, `agentstd sync` syncs all configured targets without prompting.
 
 ### `agentstd doctor`
 
@@ -204,9 +219,61 @@ Lists supported targets and their capability status.
 
 `agentstd targets` also lists targets by default.
 
+### `agentstd targets add` / `agentstd targets remove`
+
+Add or remove a target from `.agentstd.yaml` without hand-editing the YAML. Validates the id against supported adapters (`claude`, `codex`); writes a `.bak` backup before mutating. `remove` refuses to delete the last configured target (use `agentstd uninstall` for a full tear-down). Use `--global` to mutate `~/.agentstd.yaml` instead.
+
+```bash
+agentstd targets add codex        # add codex to the project config
+agentstd targets remove claude    # remove claude (refuses if it's the last target)
+agentstd targets add codex --global
+```
+
+Neither command auto-syncs — run `agentstd sync` afterward to apply, or `agentstd uninstall <id>` to clean a removed target's provider files.
+
+### `agentstd uninstall`
+
+Removes AgentStd from the current project (or the home layer with `--global`). It is the surgical inverse of `sync`: only AgentStd-managed provider entries are touched, and user-authored hooks, MCP servers, agents, and instructions are preserved.
+
+What gets removed:
+
+- **Provider artifacts** (via each adapter's `remove()`): agentstd hooks stripped from `.claude/settings.json` and `.codex/hooks.json`; `agentstd:`-prefixed MCP servers stripped from `.mcp.json`; managed `agentstd:start/end` blocks stripped from `AGENTS.md` and `.codex/config.toml`; `.codex/rules/agentstd.rules` deleted; configured agent files (`.claude/agents/<id>.md`, `.codex/agents/<id>.toml`) deleted; copied skill dirs removed from `.claude/skills/`. Files left empty by stripping are deleted.
+- **`.agentstd.yaml`** — deleted (a `.bak` backup is written first).
+- **`.agentstd/`** directory (hooks, instructions) — deleted.
+
+What is **kept**:
+
+- `.agents/skills/` — your skill library is left in place. Pass `--purge-skills` to remove it too.
+- All user-authored provider content (hooks you wrote, MCP servers you added, agent files you authored).
+
+```bash
+# Uninstall a single target's artifacts, then purge config
+agentstd uninstall claude
+
+# Uninstall everything (all configured targets)
+agentstd uninstall --all
+
+# Preview without changing anything
+agentstd uninstall --all --dry-run
+
+# Full nuke including the skills library
+agentstd uninstall --all --purge-skills
+
+# Purge the home layer instead of the project layer
+agentstd uninstall --all --global
+```
+
+`--project-only` skips the home layer; `--no-project-only` forces the merge when resolving which targets to uninstall. With no target arg and multiple configured targets in an interactive terminal, a multiselect is shown (all preselected).
+
+### Update notifications
+
+AgentStd checks `npm` for a newer published version at most once per 24 hours (cached at `~/.agentstd/.update-cache.json`) and prints a non-blocking hint to stderr when an update is available. The check never blocks startup or breaks execution.
+
+Disable it by setting `AGENTSTD_NO_UPDATE_CHECK=1` in your environment. The check is also automatically suppressed in non-interactive (non-TTY) sessions and in tests.
+
 ## Config fields
 
-AgentStd config is additive and versioned with `version: 1`. Existing minimal configs continue to work.
+AgentStd config is additive and versioned with a `version` field (currently `1`). Existing minimal configs continue to work: older `version` values are migrated to the current version in-memory at load time, so a stale on-disk config never breaks sync. A config version newer than your installed AgentStd throws — upgrade AgentStd to resolve.
 
 Core fields:
 
@@ -244,7 +311,7 @@ Adapters preserve existing provider-owned settings and only replace AgentStd-man
 AgentStd is designed to be safe and predictable:
 
 - **Source of truth**: `.agentstd` is the single source of truth; agent configs are derived
-- **Never deletes user files**: Only writes and updates agent-specific config
+- **Never deletes user files**: `sync` only writes and updates agent-specific config; it never deletes. `uninstall` removes only AgentStd-managed entries (marked hooks, `agentstd:` MCP servers, managed blocks, configured agents/skills) and deletes emptied files — user-authored content is always preserved
 - **Preserves unknown settings**: Existing customization in agent configs is left intact
 - **Idempotent**: Running `agentstd sync` multiple times produces the same result
 - **No duplicate hooks**: AgentStd detects and avoids duplicating already-synced hooks

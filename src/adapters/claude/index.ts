@@ -2,6 +2,7 @@ import { fileExists } from '../../core/fs';
 import { claudeDir, claudeSettingsPath } from '../../core/paths';
 import type { AgentAdapter } from '../../core/types';
 import { doctor } from './doctor';
+import { remove } from './remove';
 import { sync } from './sync';
 
 export const claudeAdapter: AgentAdapter = {
@@ -25,4 +26,5 @@ export const claudeAdapter: AgentAdapter = {
 
   sync,
   doctor,
+  remove,
 };

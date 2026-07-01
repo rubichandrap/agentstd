@@ -1,74 +1,186 @@
 import path from 'node:path';
 import fs from 'fs-extra';
 import YAML from 'yaml';
-import { ensureDir, fileExists } from '../../core/fs';
+import { listAdapters } from '../../adapters';
+import { agentStdConfigSchema } from '../../core/config';
+import { ensureDir, fileExists, writeConfigWithBackup } from '../../core/fs';
 import { log } from '../../core/logger';
+import { migrateConfig } from '../../core/migrations';
 import { homeRoot } from '../../core/paths';
 
 export interface InitOptions {
   global?: boolean;
+  force?: boolean;
+  dryRun?: boolean;
+  interactive?: boolean;
+  targets?: string[];
+  /** Test seam: override the interactive target prompt. */
+  promptTargets?: () => Promise<string[]>;
 }
 
 export async function initCmd(options?: InitOptions): Promise<void> {
   if (options?.global) {
-    await initGlobal();
+    await initGlobal(options);
     return;
   }
-  await initProject();
+  await initProject(options);
 }
 
-async function initProject(): Promise<void> {
+async function initProject(options?: InitOptions): Promise<void> {
   const root = process.cwd();
   const configFile = path.join(root, '.agentstd.yaml');
   const agentStdDir = path.join(root, '.agentstd');
 
   if (await fileExists(configFile)) {
-    log.warn('.agentstd.yaml already exists. Aborting.');
+    if (options?.force) {
+      await resetConfig(configFile, projectDefaultConfig(options?.targets ?? DEFAULT_TARGETS));
+      return;
+    }
+    // Upgrade path is silent: preserve existing targets, do not prompt.
+    await upgradeConfig(configFile, { dryRun: options?.dryRun });
     return;
   }
 
-  await createProjectDefaults(root, agentStdDir, configFile);
+  const targets = await resolveInitTargets(options);
+  await createProjectDefaults(root, agentStdDir, configFile, targets);
 
   log.success('AgentStd initialized successfully!');
+  log.info(`  Targets: ${targets.join(', ')}`);
   log.info('Next steps:');
-  log.dim('  1. Edit .agentstd.yaml to configure targets');
-  log.dim(
-    '  2. Add skills to .agents/skills/ (or run `agentstd init --global` to seed a home skill library)',
-  );
-  log.dim('  3. Run: agentstd sync');
+  log.dim('  1. Add skills to .agents/skills/ (or run `agentstd init --global` to seed a home skill library)');
+  log.dim('  2. Run: agentstd sync');
 }
 
-async function initGlobal(): Promise<void> {
+async function initGlobal(options?: InitOptions): Promise<void> {
   const home = homeRoot();
   const configFile = path.join(home, '.agentstd.yaml');
   const agentStdDir = path.join(home, '.agentstd');
 
   if (await fileExists(configFile)) {
-    log.warn('Home .agentstd.yaml already exists. Aborting.');
+    if (options?.force) {
+      await resetConfig(configFile, globalDefaultConfig(home, options?.targets ?? DEFAULT_TARGETS));
+      return;
+    }
+    await upgradeConfig(configFile, { dryRun: options?.dryRun });
     return;
   }
 
-  await createGlobalDefaults(home, agentStdDir, configFile);
+  const targets = await resolveInitTargets(options);
+  await createGlobalDefaults(home, agentStdDir, configFile, targets);
 
   log.success('AgentStd home config initialized!');
   log.info(`  Created: ${path.join(home, '.agentstd.yaml')}`);
   log.info(`  Created: ${path.join(home, '.agentstd/hooks/pretooluse.js')}`);
   log.info(`  Ensured: ${path.join(home, '.agents/skills/')}`);
+  log.info(`  Targets: ${targets.join(', ')}`);
   log.dim(
     '  Drop shared skills (like caveman) into ~/.agents/skills/ and they sync to every project.',
   );
 }
 
-async function createProjectDefaults(
-  _root: string,
-  agentStdDir: string,
-  configFile: string,
-): Promise<void> {
-  // .agentstd.yaml
-  const config = {
+const DEFAULT_TARGETS = ['claude'];
+
+async function resolveInitTargets(options?: InitOptions): Promise<string[]> {
+  if (options?.targets && options.targets.length > 0) {
+    return options.targets;
+  }
+  const interactive = options?.interactive ?? (process.stdin.isTTY && process.stdout.isTTY);
+  if (!interactive) return [...DEFAULT_TARGETS];
+  return (options?.promptTargets ?? promptInitTargets)();
+}
+
+async function promptInitTargets(): Promise<string[]> {
+  const { multiselect, isCancel, cancel } = await import('@clack/prompts');
+  const adapterIds = listAdapters().map((a) => a.id);
+  const selected = await multiselect({
+    message: 'Select agent targets to configure',
+    options: adapterIds.map((id) => ({ value: id, label: id })),
+    initialValues: DEFAULT_TARGETS.filter((id) => adapterIds.includes(id)),
+    required: true,
+  });
+  if (isCancel(selected)) {
+    cancel('Init cancelled.');
+    process.exit(0);
+  }
+  const picked = (selected as string[]).filter((id) => adapterIds.includes(id));
+  return picked.length > 0 ? picked : [...DEFAULT_TARGETS];
+}
+
+/**
+ * Non-destructively bring an existing config up to date: run version
+ * migrations, then backfill any newly-added default keys via the schema.
+ * Writes a `.bak` backup before touching the file. Comments are not preserved
+ * (YAML.stringify limitation) — the backup mitigates this.
+ */
+async function upgradeConfig(configFile: string, opts: { dryRun?: boolean }): Promise<void> {
+  const label = path.basename(configFile);
+  const raw = await fs.readFile(configFile, 'utf8');
+
+  let parsed: unknown;
+  try {
+    parsed = YAML.parse(raw);
+  } catch (err) {
+    log.error(`Could not parse ${label}: ${(err as Error).message}`);
+    return;
+  }
+
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    log.error(`${label} is not a valid config object. Aborting.`);
+    return;
+  }
+
+  let migrated: ReturnType<typeof migrateConfig>;
+  try {
+    migrated = migrateConfig(parsed as Record<string, unknown>);
+  } catch (err) {
+    log.error((err as Error).message);
+    return;
+  }
+
+  const validation = agentStdConfigSchema.safeParse(migrated.obj);
+  if (!validation.success) {
+    log.error(`Cannot upgrade ${label}: config is invalid.`);
+    for (const issue of validation.error.issues) {
+      log.dim(`  - ${issue.path.join('.')}: ${issue.message}`);
+    }
+    return;
+  }
+
+  const upgraded = YAML.stringify(validation.data);
+  const versionNote = migrated.changed
+    ? ` (v${migrated.fromVersion} -> v${migrated.toVersion})`
+    : '';
+
+  if (upgraded === raw) {
+    log.info(`${label} is already up to date.`);
+    return;
+  }
+
+  if (opts.dryRun) {
+    log.info(`${label} would be upgraded${versionNote}.`);
+    log.dim('  New default keys would be added. Run `agentstd init` (no --dry-run) to apply.');
+    log.dim('  A .bak backup will be written; comments are not preserved.');
+    return;
+  }
+
+  const bak = await writeConfigWithBackup(configFile, validation.data);
+  log.success(`Upgraded ${label}${versionNote}.`);
+  if (bak) log.info(`  Backup: ${bak}`);
+  log.dim('  Missing default keys were added. Note: comments are not preserved.');
+}
+
+async function resetConfig(configFile: string, config: unknown): Promise<void> {
+  const label = path.basename(configFile);
+  const bak = await writeConfigWithBackup(configFile, config);
+  log.success(`Reset ${label} to defaults (--force).`);
+  if (bak) log.info(`  Backup: ${bak}`);
+}
+
+function projectDefaultConfig(targets: string[] = DEFAULT_TARGETS): Record<string, unknown> {
+  return {
     version: 1,
     projectOnly: false,
-    targets: ['claude'],
+    targets,
     hooks: {
       preToolUse: {
         command: 'node .agentstd/hooks/pretooluse.js',
@@ -95,36 +207,14 @@ async function createProjectDefaults(
     },
     agents: {},
   };
-  await fs.writeFile(configFile, YAML.stringify(config));
-
-  // .agentstd/hooks/pretooluse.js
-  const hooksDir = path.join(agentStdDir, 'hooks');
-  await ensureDir(hooksDir);
-  await fs.writeFile(path.join(hooksDir, 'pretooluse.js'), getDefaultHook());
-
-  // .agents/skills/example-skill/SKILL.md
-  const skillsBase = path.join(_root, '.agents', 'skills');
-  const skillDir = path.join(skillsBase, 'example-skill');
-  await ensureDir(skillDir);
-  await fs.writeFile(path.join(skillDir, 'SKILL.md'), getDefaultSkillMD());
-
-  // .agentstd/instructions/shared.md
-  const instrDir = path.join(agentStdDir, 'instructions');
-  await ensureDir(instrDir);
-  await fs.writeFile(path.join(instrDir, 'shared.md'), getDefaultInstructions());
 }
 
-async function createGlobalDefaults(
-  home: string,
-  agentStdDir: string,
-  configFile: string,
-): Promise<void> {
+function globalDefaultConfig(home: string, targets: string[] = DEFAULT_TARGETS): Record<string, unknown> {
   const homeHookPath = path.join(home, '.agentstd', 'hooks', 'pretooluse.js');
-
-  // ~/.agentstd.yaml
-  const config = {
+  return {
     version: 1,
-    targets: ['claude'],
+    projectOnly: false,
+    targets,
     hooks: {
       preToolUse: {
         command: `node ${homeHookPath}`,
@@ -151,7 +241,42 @@ async function createGlobalDefaults(
     },
     agents: {},
   };
-  await fs.writeFile(configFile, YAML.stringify(config));
+}
+
+async function createProjectDefaults(
+  root: string,
+  agentStdDir: string,
+  configFile: string,
+  targets: string[] = DEFAULT_TARGETS,
+): Promise<void> {
+  // .agentstd.yaml
+  await fs.writeFile(configFile, YAML.stringify(projectDefaultConfig(targets)));
+
+  // .agentstd/hooks/pretooluse.js
+  const hooksDir = path.join(agentStdDir, 'hooks');
+  await ensureDir(hooksDir);
+  await fs.writeFile(path.join(hooksDir, 'pretooluse.js'), getDefaultHook());
+
+  // .agents/skills/example-skill/SKILL.md
+  const skillsBase = path.join(root, '.agents', 'skills');
+  const skillDir = path.join(skillsBase, 'example-skill');
+  await ensureDir(skillDir);
+  await fs.writeFile(path.join(skillDir, 'SKILL.md'), getDefaultSkillMD());
+
+  // .agentstd/instructions/shared.md
+  const instrDir = path.join(agentStdDir, 'instructions');
+  await ensureDir(instrDir);
+  await fs.writeFile(path.join(instrDir, 'shared.md'), getDefaultInstructions());
+}
+
+async function createGlobalDefaults(
+  home: string,
+  agentStdDir: string,
+  configFile: string,
+  targets: string[] = DEFAULT_TARGETS,
+): Promise<void> {
+  // ~/.agentstd.yaml
+  await fs.writeFile(configFile, YAML.stringify(globalDefaultConfig(home, targets)));
 
   // ~/.agentstd/hooks/pretooluse.js
   const hooksDir = path.join(agentStdDir, 'hooks');

@@ -3,6 +3,7 @@ import fs from 'fs-extra';
 import YAML from 'yaml';
 import { fileExists } from './fs';
 import { agentStdConfigSchema, type AgentStdConfig } from './config';
+import { migrateConfig } from './migrations';
 
 export interface MergedConfigResult {
   config: AgentStdConfig;
@@ -40,22 +41,10 @@ async function readYamlObject(
   if (!isPlainObject(parsed)) {
     throw new Error(`Config at ${filePath} must be a YAML object.`);
   }
-  return { object: parsed as Record<string, unknown>, found: true };
-}
-
-function checkVersionAgreement(
-  home: Record<string, unknown>,
-  project: Record<string, unknown>,
-  homePath: string,
-  projectPath: string,
-): void {
-  const homeVersion = home.version;
-  const projectVersion = project.version;
-  if (homeVersion !== undefined && projectVersion !== undefined && homeVersion !== projectVersion) {
-    throw new Error(
-      `Config version mismatch: ${homePath} has version ${homeVersion} but ${projectPath} has version ${projectVersion}. Versions must agree.`,
-    );
-  }
+  // Migrate stale on-disk configs up to the current version in-memory so
+  // sync/status/doctor stay resilient without rewriting the user's file.
+  const migrated = migrateConfig(parsed as Record<string, unknown>);
+  return { object: migrated.obj, found: true };
 }
 
 export async function loadMergedConfig(
@@ -100,8 +89,9 @@ export async function loadMergedConfig(
     return { config: validation.data, sources };
   }
 
-  checkVersionAgreement(homeRead.object, projectRead.object, homePath, projectPath);
-
+  // Both objects are migrated to the current version by readYamlObject (or the
+  // read throws for a newer-than-supported version), so no cross-layer version
+  // reconciliation is needed here.
   const merged = deepMerge(homeRead.object, projectRead.object);
   const validation = agentStdConfigSchema.safeParse(merged);
   if (!validation.success) {
