@@ -1,8 +1,10 @@
 import path from 'node:path';
+import { permissionsOf } from '../../core/config-defaults';
 import { ensureDir, fileExists } from '../../core/fs';
 import { claudeSkillsDir } from '../../core/paths';
+import { syncClaudeAgents, syncClaudeMcpServers } from '../../core/provider-config';
 import type { FileOperation, SyncContext, SyncResult } from '../../core/types';
-import { needsSettingsUpdate, upsertPreToolUseHook } from './settings';
+import { needsSettingsUpdate, upsertClaudeSettings } from './settings';
 import { syncClaudeSkills } from './skills';
 
 export async function sync(ctx: SyncContext): Promise<SyncResult> {
@@ -22,7 +24,21 @@ export async function sync(ctx: SyncContext): Promise<SyncResult> {
     changed.push(c);
   }
 
-  if (ctx.config.hooks.preToolUse) {
+  changed.push(
+    ...(await syncClaudeMcpServers(ctx.projectRoot, ctx.config, operations, ctx.dryRun)),
+  );
+  changed.push(...(await syncClaudeAgents(ctx.projectRoot, ctx.config, operations, ctx.dryRun)));
+
+  const permissions = permissionsOf(ctx.config);
+  const hasCommandPermissions = Object.values(permissions.commands).some(
+    (entries) => entries.length > 0,
+  );
+  const hasFilePermissions =
+    permissions.files.denyRead.length > 0 || permissions.files.denyWrite.length > 0;
+  const hasSettingsConfig =
+    !!ctx.config.hooks.preToolUse || hasCommandPermissions || hasFilePermissions;
+
+  if (hasSettingsConfig) {
     const settingsPath = path.join(ctx.projectRoot, '.claude', 'settings.json');
     const settingsDir = path.join(ctx.projectRoot, '.claude');
     const settingsExists = await fileExists(settingsPath);
@@ -38,7 +54,7 @@ export async function sync(ctx: SyncContext): Promise<SyncResult> {
       });
       if (!ctx.dryRun) {
         try {
-          await upsertPreToolUseHook(settingsPath, ctx.config);
+          await upsertClaudeSettings(settingsPath, ctx.config);
         } catch (err) {
           warnings.push(`Failed to create Claude settings: ${err}`);
         }
@@ -59,7 +75,7 @@ export async function sync(ctx: SyncContext): Promise<SyncResult> {
         });
         if (!ctx.dryRun) {
           try {
-            await upsertPreToolUseHook(settingsPath, ctx.config);
+            await upsertClaudeSettings(settingsPath, ctx.config);
           } catch (err) {
             warnings.push(`Failed to update Claude settings: ${err}`);
           }

@@ -15,6 +15,9 @@ export interface AgentCapabilities {
   preToolUse: Capability;
   skills: Capability;
   instructions: Capability;
+  mcpServers: Capability;
+  permissions: Capability;
+  agents: Capability;
 }
 
 export interface SyncContext {

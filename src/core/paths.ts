@@ -60,3 +60,39 @@ export function claudeSettingsPath(root: string): string {
 export function claudeSkillsDir(root: string): string {
   return path.join(claudeDir(root), 'skills');
 }
+
+export function claudeAgentsDir(root: string): string {
+  return path.join(claudeDir(root), 'agents');
+}
+
+export function mcpConfigPath(root: string): string {
+  return path.join(root, '.mcp.json');
+}
+
+export function codexDir(root: string): string {
+  return path.join(root, '.codex');
+}
+
+export function codexHooksPath(root: string): string {
+  return path.join(codexDir(root), 'hooks.json');
+}
+
+export function codexConfigPath(root: string): string {
+  return path.join(codexDir(root), 'config.toml');
+}
+
+export function codexRulesDir(root: string): string {
+  return path.join(codexDir(root), 'rules');
+}
+
+export function codexAgentStdRulesPath(root: string): string {
+  return path.join(codexRulesDir(root), 'agentstd.rules');
+}
+
+export function codexAgentsDir(root: string): string {
+  return path.join(codexDir(root), 'agents');
+}
+
+export function agentsMdPath(root: string): string {
+  return path.join(root, 'AGENTS.md');
+}

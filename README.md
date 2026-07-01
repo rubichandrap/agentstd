@@ -6,17 +6,17 @@
 [![npm version](https://img.shields.io/npm/v/agentstd.svg)](https://www.npmjs.com/package/agentstd)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20.20.0-brightgreen.svg)](https://nodejs.org/)
 
-Standardize hooks, skills, and shared instructions across AI coding agents.
+Standardize hooks, skills, instructions, MCP servers, permissions, and agents across AI coding agents.
 
 Write your agent rules once. Sync them everywhere.
 
 ## What is AgentStd?
 
-AgentStd gives your repository one source of truth for AI agent behavior. You write your hooks, skills, and instructions in a centralized `.agentstd` directory, then sync them into agent-specific config folders such as `.claude`.
+AgentStd gives your repository one source of truth for AI agent behavior. You write portable config once, then AgentStd compiles it into provider-native files such as `.claude/settings.json`, `.mcp.json`, `.codex/hooks.json`, and `AGENTS.md`.
 
 ## Why AgentStd?
 
-When using multiple AI coding agents (Claude Code, OpenCode, CommandCode, Pi, etc.), each agent expects its own config folder and format. You end up duplicating the same hooks, skills, and instructions across different folders. AgentStd eliminates this duplication by centralizing your rules, then compiling them to each agent's native format.
+When using multiple AI coding agents (Claude Code, Codex, OpenCode, CommandCode, Pi, etc.), each agent expects its own config folder and format. You end up duplicating the same hooks, skills, instructions, MCP servers, permissions, and subagent definitions across different folders. AgentStd eliminates this duplication by centralizing your rules, then compiling them to each agent's native format.
 
 ## Installation
 
@@ -53,8 +53,11 @@ agentstd sync --dry-run
 # Apply changes
 agentstd sync
 
+# Inspect what AgentStd sees
+agentstd status
+
 # Verify everything is healthy
-agentstd doctor
+agentstd check
 ```
 
 ## Commands
@@ -107,7 +110,7 @@ Skip the home layer entirely (no `~/.agentstd.yaml` merge, no `~/.agents/skills/
 
 - **Persistent**: set `projectOnly: true` in `.agentstd.yaml`.
 - **One-off flag**: `agentstd sync --project-only` (forces ON), or `agentstd sync --no-project-only` (forces OFF, overrides config).
-- Applies uniformly to `sync`, `doctor`, and `skills list/show`.
+- Applies uniformly to `sync`, `doctor`/`check`, `status`, and `skills list/show`.
 
 ### `agentstd sync`
 
@@ -117,8 +120,12 @@ Reads `.agentstd.yaml` and syncs configuration to target agent's folder.
 # Sync all configured targets
 agentstd sync
 
+# Sync all configured targets without an interactive prompt
+agentstd sync --all
+
 # Sync only a specific target
 agentstd sync claude
+agentstd sync codex
 
 # Preview changes without writing files
 agentstd sync --dry-run
@@ -137,8 +144,22 @@ For Claude, this:
 
 - Copies all skills to `.claude/skills/`
 - Updates `.claude/settings.json` with the PreToolUse hook
+- Updates `.claude/settings.json` with portable permissions
+- Writes MCP servers to `.mcp.json`
+- Writes AgentStd agents to `.claude/agents/`
 - Merges with existing settings (never overwrites unrelated config)
 - Is idempotent — running it multiple times produces the same result
+
+For Codex, this:
+
+- Uses `.agents/skills/` natively (no copy needed)
+- Upserts shared instructions into `AGENTS.md` using AgentStd managed markers
+- Writes hooks to `.codex/hooks.json`
+- Writes MCP servers to `.codex/config.toml`
+- Writes command permission rules to `.codex/rules/agentstd.rules`
+- Writes AgentStd agents to `.codex/agents/`
+
+If multiple targets are configured and the terminal is interactive, `agentstd sync` asks which target to sync. In CI/non-interactive mode, `agentstd sync` keeps the current behavior and syncs all configured targets.
 
 ### `agentstd doctor`
 
@@ -147,12 +168,31 @@ Checks the current project state and prints a readable report. Verifies:
 - `.agentstd.yaml` exists and is valid
 - Hook and skills directories exist (project + home, unless `--project-only`)
 - Each target agent's config is correctly synced
+- Copied/managed skills and provider config are not stale
 
 `--project-only` hides the Home section and skips `~/.agentstd.yaml` checks.
+
+### `agentstd check`
+
+Friendly alias for `agentstd doctor`.
+
+### `agentstd status`
+
+Shows a fast summary of what AgentStd sees in the current project:
+
+- config validity and active mode (`project-only` or merged home + project)
+- configured targets
+- project/home sources
+- skill counts
+- configured hooks, instructions, MCP servers, permissions, and agents
+
+`status` does not inspect provider output files. Use `agentstd check` for health checks and drift warnings.
 
 ### `agentstd skills list`
 
 Lists all skills with name, description, and a `[home]`/`[project]` source tag. Use `--project-only` to list only project skills (no home library).
+
+`agentstd skills` also lists skills by default.
 
 ### `agentstd skills show <skillId>`
 
@@ -162,21 +202,42 @@ Shows a skill's full metadata and content, with its source (`home` or `project`)
 
 Lists supported targets and their capability status.
 
-## Claude Code support
+`agentstd targets` also lists targets by default.
 
-Claude Code is the first supported target agent. AgentStd currently syncs:
+## Config fields
 
-- **Skills** into `.claude/skills/` — full native support
-- **PreToolUse hook** into `.claude/settings.json` — full native support
-- **Instructions** — partial support
+AgentStd config is additive and versioned with `version: 1`. Existing minimal configs continue to work.
 
-| Feature       | Status    |
-|---------------|-----------|
-| PreToolUse    | Native    |
-| Skills        | Native    |
-| Instructions  | Partial   |
+Core fields:
 
-The Claude adapter preserves existing settings and hooks you may have configured directly. It never overwrites unrelated configuration.
+- `targets` — target adapters to sync, currently `claude` and `codex`
+- `hooks.preToolUse.command` — shared pre-tool-use command
+- `skills.dir` / `skills.homeDir` — project and home skill source directories
+- `instructions.shared` — shared instruction file used by provider adapters
+
+Umbrella config fields:
+
+- `mcpServers` — portable MCP server definitions compiled to provider-native config
+- `permissions.commands` — token-array command rules such as `[pnpm, test]`
+- `permissions.files` — portable read/write file restrictions where supported
+- `agents` — shared subagent definitions compiled to provider-native agent files
+
+## Supported Targets
+
+AgentStd currently supports Claude Code and Codex.
+
+| Feature       | Claude Code | Codex |
+|---------------|-------------|-------|
+| PreToolUse    | Native      | Native |
+| Skills        | Native copy | Native `.agents/skills` |
+| Instructions  | Partial     | Native `AGENTS.md` |
+| MCP servers   | Native `.mcp.json` | Native `.codex/config.toml` |
+| Permissions   | Partial     | Partial |
+| Agents        | Native `.claude/agents` | Native `.codex/agents` |
+
+Claude skills are copied into `.claude/skills/`. Codex reads `.agents/skills/` directly, so custom `skills.dir` values are not copied for Codex.
+
+Adapters preserve existing provider-owned settings and only replace AgentStd-managed entries or marked blocks.
 
 ## Safety guarantees
 

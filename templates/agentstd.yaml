@@ -4,6 +4,7 @@ version: 1
 
 targets:
   - claude
+  # - codex
 
 hooks:
   preToolUse:
@@ -15,3 +16,38 @@ skills:
 
 instructions:
   shared: .agentstd/instructions/shared.md
+
+# mcpServers:
+#   github:
+#     transport: stdio
+#     command: npx
+#     args:
+#       - -y
+#       - "@modelcontextprotocol/server-github"
+#     env:
+#       GITHUB_TOKEN: "${GITHUB_TOKEN}"
+
+# permissions:
+#   commands:
+#     allow:
+#       - [pnpm, test]
+#       - [pnpm, typecheck]
+#     prompt:
+#       - [git, push]
+#     deny:
+#       - [rm, -rf]
+#   files:
+#     denyRead:
+#       - .env
+#       - ".env.*"
+#     denyWrite:
+#       - .env
+#       - ".env.*"
+
+# agents:
+#   code-reviewer:
+#     description: Review code changes for correctness and maintainability.
+#     instructions: .agentstd/agents/code-reviewer.md
+#     tools:
+#       - read
+#       - bash

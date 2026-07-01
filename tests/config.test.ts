@@ -20,7 +20,7 @@ describe('agentStdConfigSchema', () => {
   it('parses full config', () => {
     const result = agentStdConfigSchema.safeParse({
       version: 1,
-      targets: ['claude'],
+      targets: ['claude', 'codex'],
       hooks: {
         preToolUse: {
           command: 'node .agentstd/hooks/pretooluse.js',
@@ -33,8 +33,46 @@ describe('agentStdConfigSchema', () => {
       instructions: {
         shared: '.agentstd/instructions/shared.md',
       },
+      mcpServers: {
+        github: {
+          transport: 'stdio',
+          command: 'npx',
+          args: ['-y', '@modelcontextprotocol/server-github'],
+          env: { GITHUB_TOKEN: 'GITHUB_TOKEN' },
+        },
+      },
+      permissions: {
+        commands: {
+          allow: [['pnpm', 'test']],
+          prompt: [['git', 'push']],
+          deny: [['rm', '-rf']],
+        },
+        files: {
+          denyRead: ['.env'],
+          denyWrite: ['.env'],
+        },
+      },
+      agents: {
+        'code-reviewer': {
+          description: 'Review code changes.',
+          instructions: '.agentstd/agents/code-reviewer.md',
+          tools: ['read', 'bash'],
+        },
+      },
     });
     expect(result.success).toBe(true);
+  });
+
+  it('rejects command permissions expressed as shell strings', () => {
+    const result = agentStdConfigSchema.safeParse({
+      version: 1,
+      permissions: {
+        commands: {
+          allow: ['pnpm test'],
+        },
+      },
+    });
+    expect(result.success).toBe(false);
   });
 
   it('rejects missing version', () => {

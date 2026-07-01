@@ -1,6 +1,6 @@
 import path from 'node:path';
 import pc from 'picocolors';
-import { claudeAdapter } from '../../adapters/claude/index';
+import { getAdapter } from '../../adapters';
 import {
   ConfigValidationError,
   loadMergedConfig,
@@ -9,14 +9,12 @@ import {
 import { fileExists } from '../../core/fs';
 import { log } from '../../core/logger';
 import { homeRoot } from '../../core/paths';
-import type { AgentAdapter, FileOperation, SyncContext } from '../../core/types';
-
-const adapters: Record<string, AgentAdapter> = {
-  claude: claudeAdapter,
-};
+import type { FileOperation, SyncContext } from '../../core/types';
+import { resolveSyncTargets } from './sync-targets';
 
 export interface SyncOptions {
   target?: string;
+  all?: boolean;
   dryRun?: boolean;
   check?: boolean;
   projectOnly?: boolean;
@@ -94,10 +92,15 @@ export async function syncCmd(target?: string, options?: Record<string, unknown>
   if (!merged) return;
   const { config } = merged;
 
-  const targets = target ? [target] : config.targets;
-
   const dryRun = !!(options as SyncOptions)?.dryRun;
   const check = !!(options as SyncOptions)?.check;
+  const targets = await resolveSyncTargets(config, {
+    requestedTarget: target,
+    all: !!(options as SyncOptions)?.all,
+    dryRun,
+    check,
+    isInteractive: process.stdin.isTTY && process.stdout.isTTY,
+  });
 
   const adapterDryRun = dryRun || check;
 
@@ -111,7 +114,7 @@ export async function syncCmd(target?: string, options?: Record<string, unknown>
       continue;
     }
 
-    const adapter = adapters[t];
+    const adapter = getAdapter(t);
     if (!adapter) {
       log.warn(`Unknown target "${t}". Skipping.`);
       continue;

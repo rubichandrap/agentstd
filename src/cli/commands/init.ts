@@ -81,6 +81,19 @@ async function createProjectDefaults(
     instructions: {
       shared: '.agentstd/instructions/shared.md',
     },
+    mcpServers: {},
+    permissions: {
+      commands: {
+        allow: [],
+        prompt: [],
+        deny: [],
+      },
+      files: {
+        denyRead: [],
+        denyWrite: [],
+      },
+    },
+    agents: {},
   };
   await fs.writeFile(configFile, YAML.stringify(config));
 
@@ -124,6 +137,19 @@ async function createGlobalDefaults(
     instructions: {
       shared: '.agentstd/instructions/shared.md',
     },
+    mcpServers: {},
+    permissions: {
+      commands: {
+        allow: [],
+        prompt: [],
+        deny: [],
+      },
+      files: {
+        denyRead: [],
+        denyWrite: [],
+      },
+    },
+    agents: {},
   };
   await fs.writeFile(configFile, YAML.stringify(config));
 
@@ -154,8 +180,9 @@ process.stdin.on("end", () => {
   }
 
   const toolName = event.tool_name || event.toolName || "";
-  const command = event.tool_input?.command || event.toolInput?.command || "";
-  const filePath = event.tool_input?.file_path || event.toolInput?.filePath || "";
+  const toolInput = event.tool_input || event.toolInput || {};
+  const command = toolInput.command || toolInput.patch || "";
+  const filePath = toolInput.file_path || toolInput.filePath || toolInput.path || "";
 
   const dangerousCommands = [
     "rm -rf",
@@ -173,7 +200,7 @@ process.stdin.on("end", () => {
   ];
 
   const isDangerousCommand =
-    toolName.toLowerCase().includes("bash") &&
+    (toolName.toLowerCase().includes("bash") || toolName === "apply_patch") &&
     dangerousCommands.some(pattern => command.includes(pattern));
 
   const isProtectedFileEdit =

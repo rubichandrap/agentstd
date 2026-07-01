@@ -1,6 +1,7 @@
 import fs from 'fs-extra';
 import type { AgentStdConfig } from '../../core/config';
 import { fileExists, writeJson } from '../../core/fs';
+import { compileClaudePermissions } from '../../core/provider-config';
 
 const AGENTSTD_HOOK_ID = 'agentstd-pretooluse';
 
@@ -56,9 +57,36 @@ export async function upsertPreToolUseHook(
   config: AgentStdConfig,
 ): Promise<boolean> {
   const settings = await readSettings(settingsPath);
-  const finalHooks = computeFinalHooks(settings, config);
-  await writeJson(settingsPath, { ...settings, hooks: finalHooks });
+  const finalSettings = computeFinalSettings(settings, config);
+  await writeJson(settingsPath, finalSettings);
   return true;
+}
+
+export async function upsertClaudeSettings(
+  settingsPath: string,
+  config: AgentStdConfig,
+): Promise<boolean> {
+  const settings = await readSettings(settingsPath);
+  const finalSettings = computeFinalSettings(settings, config);
+  await writeJson(settingsPath, finalSettings);
+  return true;
+}
+
+function computeFinalSettings(settings: ClaudeSettings, config: AgentStdConfig): ClaudeSettings {
+  const permissions = compileClaudePermissions(config);
+  const finalSettings: ClaudeSettings = {
+    ...settings,
+    hooks: computeFinalHooks(settings, config),
+  };
+
+  if (Object.keys(permissions).length > 0) {
+    finalSettings.permissions = {
+      ...((settings.permissions as Record<string, unknown> | undefined) ?? {}),
+      ...permissions,
+    };
+  }
+
+  return finalSettings;
 }
 
 function computeFinalHooks(
@@ -96,9 +124,8 @@ export async function needsSettingsUpdate(
   config: AgentStdConfig,
 ): Promise<boolean> {
   const settings = await readSettings(settingsPath);
-  const finalHooks = computeFinalHooks(settings, config);
-  const currentHooks = settings.hooks ?? {};
-  return JSON.stringify(currentHooks) !== JSON.stringify(finalHooks);
+  const finalSettings = computeFinalSettings(settings, config);
+  return JSON.stringify(settings) !== JSON.stringify(finalSettings);
 }
 
 export async function hasPreToolUseHookSynced(

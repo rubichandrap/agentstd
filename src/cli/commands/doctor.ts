@@ -1,6 +1,6 @@
 import path from 'node:path';
 import pc from 'picocolors';
-import { claudeAdapter } from '../../adapters/claude/index';
+import { getAdapter } from '../../adapters';
 import { ConfigValidationError, loadMergedConfig } from '../../core/config-merge';
 import { fileExists, readDir } from '../../core/fs';
 import { log } from '../../core/logger';
@@ -11,11 +11,7 @@ import {
   homeRoot,
   hooksDir,
 } from '../../core/paths';
-import type { AgentAdapter, DoctorCheck, DoctorContext } from '../../core/types';
-
-const adapters: Record<string, AgentAdapter> = {
-  claude: claudeAdapter,
-};
+import type { DoctorCheck, DoctorContext } from '../../core/types';
 
 function statusIcon(status: DoctorCheck['status']): string {
   switch (status) {
@@ -121,7 +117,7 @@ export async function doctorCmd(options?: { projectOnly?: boolean }): Promise<vo
   log.info(`\n${pc.bold('Targets')}`);
 
   for (const target of config.targets) {
-    const adapter = adapters[target];
+    const adapter = getAdapter(target);
     if (!adapter) {
       log.warn(`Unknown target: ${target}`);
       continue;

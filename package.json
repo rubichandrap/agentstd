@@ -15,6 +15,9 @@
     "dist",
     "templates"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "dev": "tsx src/cli/index.ts",
     "build": "tsup src/cli/index.ts --format esm --dts --clean",
