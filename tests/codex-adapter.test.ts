@@ -51,6 +51,22 @@ describe('Codex adapter', () => {
     expect(agents).toContain('<!-- agentstd:end instructions -->');
   });
 
+  it('upserts global managed instructions into .codex/AGENTS.md', async () => {
+    await fs.outputFile(path.join(tmpDir, '.agentstd', 'instructions', 'shared.md'), 'Use pnpm.');
+    const ctx = {
+      ...makeCtx(),
+      outputRoot: tmpDir,
+      scope: 'global' as const,
+    };
+
+    const result = await codexAdapter.sync(ctx);
+    const agents = await fs.readFile(path.join(tmpDir, '.codex', 'AGENTS.md'), 'utf8');
+
+    expect(result.changed).toContain('.codex/AGENTS.md');
+    expect(await fs.pathExists(path.join(tmpDir, 'AGENTS.md'))).toBe(false);
+    expect(agents).toContain('Use pnpm.');
+  });
+
   it('upserts PreToolUse into .codex/hooks.json idempotently', async () => {
     await codexAdapter.sync(makeCtx());
     await codexAdapter.sync(makeCtx());
@@ -58,7 +74,19 @@ describe('Codex adapter', () => {
     const hooks = await fs.readJson(path.join(tmpDir, '.codex', 'hooks.json'));
     expect(hooks.hooks.PreToolUse).toHaveLength(1);
     expect(hooks.hooks.PreToolUse[0].matcher).toBe('Bash|apply_patch|Edit|Write');
-    expect(hooks.hooks.PreToolUse[0].hooks[0].command).toBe('node .agentstd/hooks/pretooluse.js');
+    expect(hooks.hooks.PreToolUse[0].hooks[0].command).toBe(
+      'node "$(git rev-parse --show-toplevel)/.agentstd/hooks/pretooluse.js"',
+    );
+  });
+
+  it('preserves custom PreToolUse commands', async () => {
+    const ctx = makeCtx();
+    ctx.config.hooks.preToolUse.command = 'node ./custom-hook.js';
+
+    await codexAdapter.sync(ctx);
+
+    const hooks = await fs.readJson(path.join(tmpDir, '.codex', 'hooks.json'));
+    expect(hooks.hooks.PreToolUse[0].hooks[0].command).toBe('node ./custom-hook.js');
   });
 
   it('fails invalid hooks JSON without overwriting it', async () => {

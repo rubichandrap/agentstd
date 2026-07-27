@@ -5,6 +5,31 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-07-27
+
+### Added
+
+- Global sync scope — running `agentstd sync` from `$HOME` detects global scope automatically and writes provider files to `~/.claude/*`, `~/.codex/*` (Codex shared instructions go to `~/.codex/AGENTS.md`).
+- Cross-layer path ownership (`ConfigPathSources`) — file-backed config values (`instructions.shared`, `agents[id].instructions`) are resolved against the layer that owns them. A project sync inheriting a home-defined instruction reads the source from `~/.agentstd/...`, not `./.agentstd/...`.
+- Provider-specific hook commands — the default hook is rendered as `node "${CLAUDE_PROJECT_DIR}/.agentstd/hooks/pretooluse.js"` for Claude and `node "$(git rev-parse --show-toplevel)/.agentstd/hooks/pretooluse.js"` for Codex. Custom commands are preserved exactly.
+- Stale artifact removal during sync — when agents, MCP servers, hooks, rules, or config blocks are removed from `.agentstd.yaml`, sync removes the corresponding provider artifacts (not just uninstall). Agent files are identified by `agentstd-managed: true` / `agentstd_managed = true` markers.
+- Claude permission tracking via `_agentstd.permissions` in `settings.json` — AgentStd tracks which permission entries it contributed so it can cleanly subtract them on config change or uninstall without corrupting user-authored entries.
+- MCP server id prefixing — servers are written to `.mcp.json` as `agentstd:<name>` so uninstall can remove only AgentStd-owned entries.
+- Missing source file warnings — when `instructions.shared` or `agents[id].instructions` points at a non-existent path, sync emits a warning (not an error) and writes empty content.
+- `agentstd init --global` now also seeds `~/.agentstd/instructions/shared.md`.
+- `agentstd init` validates `--target` ids against supported adapters before writing config.
+
+### Fixed
+
+- `agentstd doctor`/`check` now exits 1 when config is missing, config is invalid, or any adapter check reports `warn` or `fail` status. Previously always exited 0 regardless of health.
+
+### Changed
+
+- `agentstd uninstall` only purges `.agentstd.yaml` and `.agentstd/` dir when all configured targets are removed in that run. Partial uninstall (subset of targets) preserves the config for remaining targets.
+- `--purge-skills` in project scope only removes the project skills directory; use `--global --purge-skills` to purge the home skills directory.
+- `agentstd targets add`/`remove` interactive prompt changed from multiselect to single-select (since both operate on one target at a time).
+- Dry-run output now shows planned removal operations.
+
 ## [0.4.0] - 2026-07-01
 
 ### Added
@@ -51,6 +76,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `.agentstd.yaml` Zod-validated config with hooks, skills, and instructions fields.
 - Safe sync dry-run (`--dry-run`) and check (`--check`) modes for previewing and CI/CD verification.
 
+[0.5.0]: https://github.com/rubichandrap/agentstd/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/rubichandrap/agentstd/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/rubichandrap/agentstd/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/rubichandrap/agentstd/compare/v0.1.0...v0.2.0

@@ -1,15 +1,10 @@
-import path from 'node:path';
 import pc from 'picocolors';
 import { getAdapter } from '../../adapters';
-import {
-  ConfigValidationError,
-  loadMergedConfig,
-  type MergedConfigResult,
-} from '../../core/config-merge';
-import { fileExists } from '../../core/fs';
+import { ConfigValidationError } from '../../core/config-merge';
 import { log } from '../../core/logger';
 import { homeRoot } from '../../core/paths';
 import type { FileOperation, SyncContext } from '../../core/types';
+import { loadAgentStdContext } from './sync-scope';
 import { resolveSyncTargets } from './sync-targets';
 
 export interface SyncOptions {
@@ -24,6 +19,7 @@ function printOperations(operations: FileOperation[]): void {
   const creates = operations.filter((o) => o.type === 'create-file' || o.type === 'create-dir');
   const copies = operations.filter((o) => o.type === 'copy-dir');
   const updates = operations.filter((o) => o.type === 'update-file');
+  const removals = operations.filter((o) => o.type === 'remove-file' || o.type === 'remove-dir');
   const skips = operations.filter((o) => o.type === 'skip');
 
   if (creates.length > 0) {
@@ -54,6 +50,14 @@ function printOperations(operations: FileOperation[]): void {
     console.log();
   }
 
+  if (removals.length > 0) {
+    console.log('Would remove:');
+    for (const op of removals) {
+      console.log(`- ${op.path}`);
+    }
+    console.log();
+  }
+
   if (skips.length > 0) {
     console.log('Would skip:');
     for (const op of skips) {
@@ -65,18 +69,12 @@ function printOperations(operations: FileOperation[]): void {
 
 export async function syncCmd(target?: string, options?: Record<string, unknown>): Promise<void> {
   const root = process.cwd();
-  const configPath = path.join(root, '.agentstd.yaml');
-
-  if (!(await fileExists(configPath))) {
-    log.error('.agentstd.yaml not found. Run: agentstd init');
-    process.exit(1);
-  }
 
   const flagProjectOnly = (options as SyncOptions)?.projectOnly;
 
-  let merged: MergedConfigResult | undefined;
+  let loaded: Awaited<ReturnType<typeof loadAgentStdContext>> | undefined;
   try {
-    merged = await loadMergedConfig(root, homeRoot(), flagProjectOnly);
+    loaded = await loadAgentStdContext(root, homeRoot(), flagProjectOnly);
   } catch (err) {
     if (err instanceof ConfigValidationError) {
       log.error(`Invalid config:`);
@@ -89,8 +87,8 @@ export async function syncCmd(target?: string, options?: Record<string, unknown>
     process.exit(1);
   }
 
-  if (!merged) return;
-  const { config } = merged;
+  if (!loaded) return;
+  const { config, scope, outputRoot, hasHomeConfig, pathSources } = loaded;
 
   const dryRun = !!(options as SyncOptions)?.dryRun;
   const check = !!(options as SyncOptions)?.check;
@@ -122,9 +120,13 @@ export async function syncCmd(target?: string, options?: Record<string, unknown>
 
     const ctx: SyncContext = {
       projectRoot: root,
+      outputRoot,
+      scope,
       config,
       dryRun: adapterDryRun,
       homeRoot: homeRoot(),
+      hasHomeConfig,
+      pathSources,
     };
     const result = await adapter.sync(ctx);
     allOperations.push(...result.operations);
@@ -179,6 +181,10 @@ export async function syncCmd(target?: string, options?: Record<string, unknown>
           break;
         case 'copy-dir':
           console.log(`- copy ${op.from} to ${op.to}`);
+          break;
+        case 'remove-file':
+        case 'remove-dir':
+          console.log(`- remove ${op.path}`);
           break;
       }
     }

@@ -12,7 +12,7 @@ Write your agent rules once. Sync them everywhere.
 
 ## What is AgentStd?
 
-AgentStd gives your repository one source of truth for AI agent behavior. You write portable config once, then AgentStd compiles it into provider-native files such as `.claude/settings.json`, `.mcp.json`, `.codex/hooks.json`, and `AGENTS.md`.
+AgentStd gives your repository one source of truth for AI agent behavior. You write portable config once, then AgentStd compiles it into provider-native files such as `.claude/settings.json`, `.mcp.json`, `.codex/hooks.json`, and Codex `AGENTS.md`.
 
 ## Why AgentStd?
 
@@ -74,7 +74,7 @@ Creates the base AgentStd project structure:
 - `.agents/skills/example-skill/SKILL.md` — example shared skill (`.agents/skills` is the source of truth)
 - `.agentstd/instructions/shared.md` — shared instructions
 
-In an interactive terminal, `init` prompts you to pick agent targets via a multiselect (Claude is preselected). Skip the prompt with `--no-interactive` or pre-select targets with a repeatable `-t/--target <id>`:
+In an interactive terminal, `init` prompts you to pick agent targets via a multiselect (Claude is preselected). Skip the prompt with `--no-interactive` or pre-select valid targets with a repeatable `-t/--target <id>`:
 
 ```bash
 # Non-interactive, pre-select both adapters
@@ -92,9 +92,12 @@ Seeds a **home-level** AgentStd config so a shared skill library lives across al
 
 - `~/.agentstd.yaml` — home configuration (deep-merged under each project)
 - `~/.agentstd/hooks/pretooluse.js` — home hook (shadowed by a project hook of the same name)
+- `~/.agentstd/instructions/shared.md` — home shared instructions (shadowed by project instructions)
 - `~/.agents/skills/` — home skill library (drop skills like Caveman here; they sync into every project)
 
 `AGENTSTD_HOME` overrides the home location (useful for testing or non-standard `$HOME`). Re-running `init --global` upgrades an existing home config in place (same migration + backfill + `.bak` flow as project `init`); `--force` resets and `--dry-run` previews.
+
+Run `agentstd sync` from `$HOME` to apply the home config to provider home folders. This is a global sync: Claude output goes to `~/.claude/*`, Codex output goes to `~/.codex/*`, and Codex shared instructions go to `~/.codex/AGENTS.md`.
 
 ## Home and project layers
 
@@ -117,7 +120,9 @@ Merge rules:
 - **Config**: project `./.agentstd.yaml` is deep-merged over `~/.agentstd.yaml`. Project scalars win; `targets` is replaced (not concatenated). Each layer's `version` is migrated to the current build's version independently; a config version newer than your installed AgentStd throws (upgrade AgentStd to resolve).
 - **Skills**: union of `~/.agents/skills/` and `./.agents/skills/`. A project skill with the same id shadows the home one.
 - **Hooks / instructions**: a project file fully replaces a home file by filename.
-- **No home config**: behaves as project-only (zero behavior change).
+- **File-backed config values**: `instructions.shared` and each `agents[id].instructions` are read from the layer that owns them. A project sync that inherits a home-defined instruction or agent reads the source file from `~/.agentstd/...`, not `./.agentstd/...`. A project-defined `agents[id]` wins entirely (its `instructions` path is resolved against the project).
+- **Missing source files**: when `instructions.shared` or `agents[id].instructions` points at a path that does not exist, AgentStd emits a warning (not an error) and writes the managed block or agent body with empty content so output stays consistent across runs.
+- **No home config**: behaves as project-only (zero behavior change). Home skills are never pulled into a project that has no `~/.agentstd.yaml`, even though a `~/.agents/skills/` directory may exist.
 
 ### Project-only mode
 
@@ -126,10 +131,11 @@ Skip the home layer entirely (no `~/.agentstd.yaml` merge, no `~/.agents/skills/
 - **Persistent**: set `projectOnly: true` in `.agentstd.yaml`.
 - **One-off flag**: `agentstd sync --project-only` (forces ON), or `agentstd sync --no-project-only` (forces OFF, overrides config).
 - Applies uniformly to `sync`, `doctor`/`check`, `status`, and `skills list/show`.
+- Project-only controls input layering only. It does not change where provider files are written.
 
 ### `agentstd sync`
 
-Reads `.agentstd.yaml` and syncs configuration to target agent's folder.
+Reads `.agentstd.yaml` and syncs configuration to target agent folders.
 
 ```bash
 # Sync all configured targets
@@ -153,26 +159,40 @@ agentstd sync --project-only
 
 # Force home merge (overrides projectOnly: true in config)
 agentstd sync --no-project-only
+
+# Apply the home config to provider home folders
+cd ~
+agentstd sync
 ```
+
+Sync has two scopes:
+
+- **Project sync**: run from a project directory. AgentStd reads `./.agentstd.yaml`, merges `~/.agentstd.yaml` underneath it by default, and writes provider files inside the project.
+- **Global sync**: run from `$HOME` when `~/.agentstd.yaml` exists. AgentStd reads the home config only and writes provider files under provider home folders such as `~/.claude` and `~/.codex`.
 
 For Claude, this:
 
 - Copies all skills to `.claude/skills/`
 - Updates `.claude/settings.json` with the PreToolUse hook
 - Updates `.claude/settings.json` with portable permissions
-- Writes MCP servers to `.mcp.json`
+- Writes MCP servers to `.mcp.json` under `agentstd:`-prefixed provider ids
 - Writes AgentStd agents to `.claude/agents/`
 - Merges with existing settings (never overwrites unrelated config)
+- Removes stale AgentStd-owned hooks, permissions, MCP servers, and agent files when they are removed from `.agentstd.yaml`
 - Is idempotent — running it multiple times produces the same result
 
 For Codex, this:
 
 - Uses `.agents/skills/` natively (no copy needed)
-- Upserts shared instructions into `AGENTS.md` using AgentStd managed markers
+- In project sync, upserts shared instructions into root `AGENTS.md` using AgentStd managed markers
+- In global sync, upserts shared instructions into `~/.codex/AGENTS.md`
 - Writes hooks to `.codex/hooks.json`
 - Writes MCP servers to `.codex/config.toml`
 - Writes command permission rules to `.codex/rules/agentstd.rules`
 - Writes AgentStd agents to `.codex/agents/`
+- Removes stale AgentStd-owned hooks, managed instruction/config blocks, rules, and agent files when they are removed from `.agentstd.yaml`
+
+Codex may require you to review/trust synced hooks with `/hooks` before they run. The default AgentStd hook blocks by exiting `2`; Codex and Claude treat that as an intentional blocking hook result.
 
 If multiple targets are configured and the terminal is interactive, `agentstd sync` shows a multiselect with all targets preselected. In CI/non-interactive mode, `agentstd sync` syncs all configured targets without prompting.
 
@@ -207,11 +227,16 @@ Shows a fast summary of what AgentStd sees in the current project:
 
 Lists all skills with name, description, and a `[home]`/`[project]` source tag. Use `--project-only` to list only project skills (no home library).
 
+Scope-aware:
+
+- Run from a project: lists merged home + project skills (project shadows home by id) when a home config exists; lists project skills only when there is no `~/.agentstd.yaml`, or when `--project-only` is passed.
+- Run from `$HOME` (`cd ~ && agentstd skills list`): lists home skills only (global scope).
+
 `agentstd skills` also lists skills by default.
 
 ### `agentstd skills show <skillId>`
 
-Shows a skill's full metadata and content, with its source (`home` or `project`). Use `--project-only` to restrict resolution to project skills only.
+Shows a skill's full metadata and content, with its source (`home` or `project`). Resolution follows the same scope rules as `skills list` (project-only, no-home-config, or global). Use `--project-only` to restrict resolution to project skills only.
 
 ### `agentstd targets list`
 
@@ -222,6 +247,8 @@ Lists supported targets and their capability status.
 ### `agentstd targets add` / `agentstd targets remove`
 
 Add or remove a target from `.agentstd.yaml` without hand-editing the YAML. Validates the id against supported adapters (`claude`, `codex`); writes a `.bak` backup before mutating. `remove` refuses to delete the last configured target (use `agentstd uninstall` for a full tear-down). Use `--global` to mutate `~/.agentstd.yaml` instead.
+
+When no target id is passed in an interactive terminal, `add` and `remove` prompt for a single target.
 
 ```bash
 agentstd targets add codex        # add codex to the project config
@@ -238,19 +265,21 @@ Removes AgentStd from the current project (or the home layer with `--global`). I
 What gets removed:
 
 - **Provider artifacts** (via each adapter's `remove()`): agentstd hooks stripped from `.claude/settings.json` and `.codex/hooks.json`; `agentstd:`-prefixed MCP servers stripped from `.mcp.json`; managed `agentstd:start/end` blocks stripped from `AGENTS.md` and `.codex/config.toml`; `.codex/rules/agentstd.rules` deleted; configured agent files (`.claude/agents/<id>.md`, `.codex/agents/<id>.toml`) deleted; copied skill dirs removed from `.claude/skills/`. Files left empty by stripping are deleted.
-- **`.agentstd.yaml`** — deleted (a `.bak` backup is written first).
-- **`.agentstd/`** directory (hooks, instructions) — deleted.
+- **`.agentstd.yaml`** — deleted when all configured targets are removed in this run (a `.bak` backup is written first).
+- **`.agentstd/`** directory (hooks, instructions) — deleted under the same condition as `.agentstd.yaml`.
 
 What is **kept**:
 
-- `.agents/skills/` — your skill library is left in place. Pass `--purge-skills` to remove it too.
+- `.agents/skills/` — your skill library is left in place. Pass `--purge-skills` to remove it too. In project scope this only purges the project skills directory; use `--global --purge-skills` to purge the configured home skills directory.
+- `.agentstd.yaml` and `.agentstd/` — kept when uninstalling a subset of configured targets. Run `agentstd uninstall --all`, or remove the last remaining target, to also purge them.
 - All user-authored provider content (hooks you wrote, MCP servers you added, agent files you authored).
 
 ```bash
-# Uninstall a single target's artifacts, then purge config
+# Uninstall a single target's artifacts (config kept when other targets remain;
+# use --all to also purge config)
 agentstd uninstall claude
 
-# Uninstall everything (all configured targets)
+# Uninstall everything (all configured targets) — also purges the config
 agentstd uninstall --all
 
 # Preview without changing anything
@@ -261,6 +290,9 @@ agentstd uninstall --all --purge-skills
 
 # Purge the home layer instead of the project layer
 agentstd uninstall --all --global
+
+# Purge the home layer and its configured home skills directory
+agentstd uninstall --all --global --purge-skills
 ```
 
 `--project-only` skips the home layer; `--no-project-only` forces the merge when resolving which targets to uninstall. With no target arg and multiple configured targets in an interactive terminal, a multiselect is shown (all preselected).
@@ -278,7 +310,7 @@ AgentStd config is additive and versioned with a `version` field (currently `1`)
 Core fields:
 
 - `targets` — target adapters to sync, currently `claude` and `codex`
-- `hooks.preToolUse.command` — shared pre-tool-use command
+- `hooks.preToolUse.command` — shared pre-tool-use command. The default project hook command is rendered provider-specifically so Claude resolves from `${CLAUDE_PROJECT_DIR}` and Codex resolves from the git repository root; custom commands are preserved exactly.
 - `skills.dir` / `skills.homeDir` — project and home skill source directories
 - `instructions.shared` — shared instruction file used by provider adapters
 
@@ -302,7 +334,9 @@ AgentStd currently supports Claude Code and Codex.
 | Permissions   | Partial     | Partial |
 | Agents        | Native `.claude/agents` | Native `.codex/agents` |
 
-Claude skills are copied into `.claude/skills/`. Codex reads `.agents/skills/` directly, so custom `skills.dir` values are not copied for Codex.
+Claude skills are copied into `.claude/skills/`. Codex reads `.agents/skills/` directly, so custom `skills.dir` values are not copied for Codex. For Codex instructions, project sync writes root `AGENTS.md`; global sync writes `~/.codex/AGENTS.md`.
+
+Claude MCP server ids in `.agentstd.yaml` can stay simple, such as `github`; AgentStd writes them to `.mcp.json` as `agentstd:github` so uninstall can remove only AgentStd-owned provider entries.
 
 Adapters preserve existing provider-owned settings and only replace AgentStd-managed entries or marked blocks.
 
@@ -311,7 +345,7 @@ Adapters preserve existing provider-owned settings and only replace AgentStd-man
 AgentStd is designed to be safe and predictable:
 
 - **Source of truth**: `.agentstd` is the single source of truth; agent configs are derived
-- **Never deletes user files**: `sync` only writes and updates agent-specific config; it never deletes. `uninstall` removes only AgentStd-managed entries (marked hooks, `agentstd:` MCP servers, managed blocks, configured agents/skills) and deletes emptied files — user-authored content is always preserved
+- **Never deletes user-authored files**: `sync` writes, updates, and removes only AgentStd-managed provider artifacts when config entries disappear (marked hooks, `agentstd:` MCP servers, managed blocks, generated agents/rules). `uninstall` removes only AgentStd-managed entries and deletes emptied files — user-authored content is always preserved. Project uninstall never purges the home skill library.
 - **Preserves unknown settings**: Existing customization in agent configs is left intact
 - **Idempotent**: Running `agentstd sync` multiple times produces the same result
 - **No duplicate hooks**: AgentStd detects and avoids duplicating already-synced hooks

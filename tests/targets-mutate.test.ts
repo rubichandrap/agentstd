@@ -1,8 +1,8 @@
 import os from 'node:os';
 import path from 'node:path';
 import fs from 'fs-extra';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import YAML from 'yaml';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { targetsAddCmd, targetsRemoveCmd } from '../src/cli/commands/targets-mutate';
 
 describe('targets add/remove', () => {
@@ -11,6 +11,8 @@ describe('targets add/remove', () => {
   let homeDir: string;
   let prevCwd: string;
   let prevHome: string | undefined;
+  let stdinIsTty: PropertyDescriptor | undefined;
+  let stdoutIsTty: PropertyDescriptor | undefined;
   let configFile: string;
 
   beforeEach(async () => {
@@ -21,12 +23,18 @@ describe('targets add/remove', () => {
     await fs.ensureDir(homeDir);
     prevCwd = process.cwd();
     prevHome = process.env.AGENTSTD_HOME;
+    stdinIsTty = Object.getOwnPropertyDescriptor(process.stdin, 'isTTY');
+    stdoutIsTty = Object.getOwnPropertyDescriptor(process.stdout, 'isTTY');
     process.env.AGENTSTD_HOME = homeDir;
     process.chdir(projectDir);
     configFile = path.join(projectDir, '.agentstd.yaml');
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
+    vi.doUnmock('@clack/prompts');
+    restoreProperty(process.stdin, 'isTTY', stdinIsTty);
+    restoreProperty(process.stdout, 'isTTY', stdoutIsTty);
     process.chdir(prevCwd);
     if (prevHome === undefined) delete process.env.AGENTSTD_HOME;
     else process.env.AGENTSTD_HOME = prevHome;
@@ -34,10 +42,7 @@ describe('targets add/remove', () => {
   });
 
   async function seedConfig(targets: string[]): Promise<void> {
-    await fs.writeFile(
-      configFile,
-      YAML.stringify({ version: 1, projectOnly: true, targets }),
-    );
+    await fs.writeFile(configFile, YAML.stringify({ version: 1, projectOnly: true, targets }));
   }
 
   it('adds a target to the project config and writes a .bak backup', async () => {
@@ -114,4 +119,48 @@ describe('targets add/remove', () => {
     expect(parsed.skills.dir).toBe('.agents/skills');
     expect(parsed.projectOnly).toBe(true);
   });
+
+  it('interactive add applies only the selected target', async () => {
+    await seedConfig(['claude']);
+    Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true });
+    Object.defineProperty(process.stdout, 'isTTY', { value: true, configurable: true });
+    vi.doMock('@clack/prompts', () => ({
+      select: vi.fn(async () => 'codex'),
+      isCancel: vi.fn(() => false),
+      cancel: vi.fn(),
+    }));
+
+    await targetsAddCmd(undefined, {});
+
+    const parsed = YAML.parse(await fs.readFile(configFile, 'utf8'));
+    expect(parsed.targets).toEqual(['claude', 'codex']);
+  });
+
+  it('interactive remove applies only the selected target', async () => {
+    await seedConfig(['claude', 'codex']);
+    Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true });
+    Object.defineProperty(process.stdout, 'isTTY', { value: true, configurable: true });
+    vi.doMock('@clack/prompts', () => ({
+      select: vi.fn(async () => 'codex'),
+      isCancel: vi.fn(() => false),
+      cancel: vi.fn(),
+    }));
+
+    await targetsRemoveCmd(undefined, {});
+
+    const parsed = YAML.parse(await fs.readFile(configFile, 'utf8'));
+    expect(parsed.targets).toEqual(['claude']);
+  });
 });
+
+function restoreProperty(
+  obj: object,
+  key: string,
+  descriptor: PropertyDescriptor | undefined,
+): void {
+  if (descriptor) {
+    Object.defineProperty(obj, key, descriptor);
+    return;
+  }
+  delete (obj as Record<string, unknown>)[key];
+}

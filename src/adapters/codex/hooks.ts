@@ -3,6 +3,9 @@ import type { AgentStdConfig } from '../../core/config';
 import { fileExists, writeJson } from '../../core/fs';
 
 const AGENTSTD_HOOK_ID = 'agentstd-pretooluse';
+const DEFAULT_PROJECT_HOOK_COMMAND = 'node .agentstd/hooks/pretooluse.js';
+const CODEX_PROJECT_HOOK_COMMAND =
+  'node "$(git rev-parse --show-toplevel)/.agentstd/hooks/pretooluse.js"';
 
 interface CodexHookEntry {
   type: string;
@@ -39,7 +42,11 @@ export async function upsertCodexPreToolUseHook(
   const current = await readCodexHooks(hooksPath);
   const hooks = current.hooks ?? {};
   const existing = hooks.PreToolUse ?? [];
-  const filtered = existing.filter((hook) => !isAgentStdHook(hook));
+
+  const expected = config.hooks.preToolUse
+    ? codexHookCommand(config.hooks.preToolUse.command)
+    : undefined;
+  const filtered = existing.filter((hook) => !isAgentStdHook(hook, expected));
 
   if (config.hooks.preToolUse) {
     filtered.push({
@@ -47,7 +54,7 @@ export async function upsertCodexPreToolUseHook(
       hooks: [
         {
           type: 'command',
-          command: config.hooks.preToolUse.command,
+          command: codexHookCommand(config.hooks.preToolUse.command),
           statusMessage: 'Checking AgentStd policy',
         },
       ],
@@ -58,10 +65,39 @@ export async function upsertCodexPreToolUseHook(
   const finalHooks: Record<string, CodexHook[]> = {};
   for (const key of Object.keys(hooks)) {
     if (key === 'PreToolUse') continue;
-    finalHooks[key] = hooks[key].map(removeAgentStdMarker);
+    finalHooks[key] = hooks[key];
   }
-  finalHooks.PreToolUse = filtered.map(removeAgentStdMarker);
+  finalHooks.PreToolUse = filtered;
   await writeJson(hooksPath, { ...current, hooks: finalHooks });
+}
+
+export async function removeCodexPreToolUseHook(
+  hooksPath: string,
+  dryRun?: boolean,
+): Promise<{ changed: boolean; removeFile: boolean }> {
+  const current = await readCodexHooks(hooksPath);
+  const hooks = current.hooks ?? {};
+  const finalHooks: Record<string, CodexHook[]> = {};
+  let changed = false;
+
+  for (const [key, entries] of Object.entries(hooks)) {
+    const filtered = entries.filter((hook) => !isAgentStdHook(hook));
+    if (filtered.length !== entries.length) changed = true;
+    if (filtered.length > 0) finalHooks[key] = filtered;
+  }
+
+  if (!changed) return { changed: false, removeFile: false };
+
+  const next: CodexHooksConfig = { ...current };
+  if (Object.keys(finalHooks).length > 0) next.hooks = finalHooks;
+  else delete next.hooks;
+  const removeFile = Object.keys(next).length === 0;
+
+  if (!dryRun) {
+    if (removeFile) await fs.remove(hooksPath);
+    else await writeJson(hooksPath, next);
+  }
+  return { changed: true, removeFile };
 }
 
 export async function needsCodexHookUpdate(
@@ -71,10 +107,9 @@ export async function needsCodexHookUpdate(
   const current = await readCodexHooks(hooksPath);
   const hooks = current.hooks ?? {};
   const existing = hooks.PreToolUse ?? [];
-  const commands = existing
-    .filter(isAgentStdHook)
-    .flatMap((hook) => hook.hooks.map((entry) => entry.command));
-  return config.hooks.preToolUse ? !commands.includes(config.hooks.preToolUse.command) : false;
+  if (!config.hooks.preToolUse) return false;
+  const expected = codexHookCommand(config.hooks.preToolUse.command);
+  return !existing.some((hook) => isAgentStdHook(hook, expected));
 }
 
 export async function hasCodexPreToolUseHookSynced(
@@ -84,17 +119,18 @@ export async function hasCodexPreToolUseHookSynced(
   if (!config.hooks.preToolUse) return true;
   const current = await readCodexHooks(hooksPath);
   const hooks = current.hooks?.PreToolUse ?? [];
-  return hooks.some((hook) =>
-    hook.hooks.some((entry) => entry.command === config.hooks.preToolUse?.command),
-  );
+  const expected = codexHookCommand(config.hooks.preToolUse.command);
+  return hooks.some((hook) => isAgentStdHook(hook, expected));
 }
 
-export function isAgentStdHook(hook: CodexHook): boolean {
+export function isAgentStdHook(hook: CodexHook, expectedCommand?: string): boolean {
   if (hook._agentstd === AGENTSTD_HOOK_ID) return true;
-  return hook.hooks.some((entry) => entry.command.includes('agentstd/hooks/pretooluse'));
+  if (expectedCommand === undefined) return false;
+  return hook.hooks.some((entry) => entry.command === expectedCommand);
 }
 
-function removeAgentStdMarker(hook: CodexHook): CodexHook {
-  const { _agentstd, ...rest } = hook;
-  return rest;
+function codexHookCommand(command: string): string {
+  return command === DEFAULT_PROJECT_HOOK_COMMAND ? CODEX_PROJECT_HOOK_COMMAND : command;
 }
+
+export { codexHookCommand };

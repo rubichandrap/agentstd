@@ -47,7 +47,9 @@ async function initProject(options?: InitOptions): Promise<void> {
   log.success('AgentStd initialized successfully!');
   log.info(`  Targets: ${targets.join(', ')}`);
   log.info('Next steps:');
-  log.dim('  1. Add skills to .agents/skills/ (or run `agentstd init --global` to seed a home skill library)');
+  log.dim(
+    '  1. Add skills to .agents/skills/ (or run `agentstd init --global` to seed a home skill library)',
+  );
   log.dim('  2. Run: agentstd sync');
 }
 
@@ -71,6 +73,7 @@ async function initGlobal(options?: InitOptions): Promise<void> {
   log.success('AgentStd home config initialized!');
   log.info(`  Created: ${path.join(home, '.agentstd.yaml')}`);
   log.info(`  Created: ${path.join(home, '.agentstd/hooks/pretooluse.js')}`);
+  log.info(`  Created: ${path.join(home, '.agentstd/instructions/shared.md')}`);
   log.info(`  Ensured: ${path.join(home, '.agents/skills/')}`);
   log.info(`  Targets: ${targets.join(', ')}`);
   log.dim(
@@ -82,11 +85,19 @@ const DEFAULT_TARGETS = ['claude'];
 
 async function resolveInitTargets(options?: InitOptions): Promise<string[]> {
   if (options?.targets && options.targets.length > 0) {
-    return options.targets;
+    return validateTargetIds(options.targets);
   }
   const interactive = options?.interactive ?? (process.stdin.isTTY && process.stdout.isTTY);
   if (!interactive) return [...DEFAULT_TARGETS];
-  return (options?.promptTargets ?? promptInitTargets)();
+  return validateTargetIds(await (options?.promptTargets ?? promptInitTargets)());
+}
+
+function validateTargetIds(targets: string[]): string[] {
+  const supportedIds = listAdapters().map((adapter) => adapter.id);
+  const unknown = targets.filter((id) => !supportedIds.includes(id));
+  if (unknown.length === 0) return targets;
+  log.error(`Unknown target "${unknown[0]}". Supported: ${supportedIds.join(', ')}`);
+  process.exit(1);
 }
 
 async function promptInitTargets(): Promise<string[]> {
@@ -209,7 +220,10 @@ function projectDefaultConfig(targets: string[] = DEFAULT_TARGETS): Record<strin
   };
 }
 
-function globalDefaultConfig(home: string, targets: string[] = DEFAULT_TARGETS): Record<string, unknown> {
+function globalDefaultConfig(
+  home: string,
+  targets: string[] = DEFAULT_TARGETS,
+): Record<string, unknown> {
   const homeHookPath = path.join(home, '.agentstd', 'hooks', 'pretooluse.js');
   return {
     version: 1,
@@ -282,6 +296,11 @@ async function createGlobalDefaults(
   const hooksDir = path.join(agentStdDir, 'hooks');
   await ensureDir(hooksDir);
   await fs.writeFile(path.join(hooksDir, 'pretooluse.js'), getDefaultHook());
+
+  // ~/.agentstd/instructions/shared.md
+  const instrDir = path.join(agentStdDir, 'instructions');
+  await ensureDir(instrDir);
+  await fs.writeFile(path.join(instrDir, 'shared.md'), getDefaultInstructions());
 
   // ~/.agents/skills/ (ensure exists, no seeded content)
   const skillsBase = path.join(home, '.agents', 'skills');

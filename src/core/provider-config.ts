@@ -2,8 +2,9 @@ import path from 'node:path';
 import fs from 'fs-extra';
 import type { AgentStdConfig } from './config';
 import { agentsOf, mcpServersOf, permissionsOf } from './config-defaults';
+import { type ConfigPathSources, sourceRoot } from './config-merge';
 import { fileExists, readJsonIfExists, writeJson } from './fs';
-import { renderTomlTable, upsertManagedBlock } from './managed-text';
+import { removeManagedBlock, renderTomlTable, upsertManagedBlock } from './managed-text';
 import {
   claudeAgentsDir,
   codexAgentStdRulesPath,
@@ -21,35 +22,29 @@ interface MpcJson {
 }
 
 export async function syncClaudeMcpServers(
-  projectRoot: string,
+  outputRoot: string,
   config: AgentStdConfig,
   operations: FileOperation[],
   dryRun?: boolean,
 ): Promise<string[]> {
   const serverEntries = Object.entries(mcpServersOf(config));
-  if (serverEntries.length === 0) return [];
-
-  const filePath = mcpConfigPath(projectRoot);
+  const filePath = mcpConfigPath(outputRoot);
   const exists = await fileExists(filePath);
-  operations.push({
-    type: exists ? 'update-file' : 'create-file',
-    path: path.relative(projectRoot, filePath) || filePath,
-  });
+  if (!exists && serverEntries.length === 0) return [];
 
-  if (dryRun) return ['.mcp.json'];
-
-  const current = (await readJsonIfExists<MpcJson>(filePath)) ?? {};
+  // Read before pushing the op so --check sees no drift on a clean sync.
+  const current = exists ? ((await readJsonIfExists<MpcJson>(filePath)) ?? {}) : {};
   const currentServers = current.mcpServers ?? {};
-  const mcpServers: Record<string, unknown> = {};
+  const nextServers: Record<string, unknown> = {};
 
   for (const [name, server] of Object.entries(currentServers)) {
     if (!name.startsWith(AGENTSTD_MCP_SERVER_PREFIX)) {
-      mcpServers[name] = server;
+      nextServers[name] = server;
     }
   }
 
   for (const [name, server] of serverEntries) {
-    mcpServers[name] = removeEmptyValues({
+    nextServers[agentStdMcpServerName(name)] = removeEmptyValues({
       command: server.command,
       args: server.args,
       url: server.url,
@@ -57,21 +52,97 @@ export async function syncClaudeMcpServers(
     });
   }
 
-  await writeJson(filePath, { ...current, mcpServers });
+  if (mcpServersEqual(currentServers, nextServers)) {
+    operations.push({
+      type: 'skip',
+      description: '.mcp.json',
+      reason: 'MCP servers already synced',
+    });
+    return [];
+  }
+
+  const nextMcpJson = buildNextMcpJson(current, nextServers);
+  operations.push({
+    type: nextMcpJson.removeFile ? 'remove-file' : exists ? 'update-file' : 'create-file',
+    path: path.relative(outputRoot, filePath) || filePath,
+  });
+
+  if (dryRun) return ['.mcp.json'];
+
+  if (nextMcpJson.removeFile) await fs.remove(filePath);
+  else await writeJson(filePath, nextMcpJson.data);
   return ['.mcp.json'];
+}
+
+function buildNextMcpJson(
+  current: MpcJson,
+  nextServers: Record<string, unknown>,
+): { data: MpcJson; removeFile: false } | { removeFile: true } {
+  if (Object.keys(nextServers).length > 0) {
+    return { data: { ...current, mcpServers: nextServers }, removeFile: false };
+  }
+  const { mcpServers: _mcpServers, ...rest } = current;
+  if (Object.keys(rest).length === 0) return { removeFile: true };
+  return { data: rest, removeFile: false };
+}
+
+function mcpServersEqual(
+  a: Record<string, unknown>,
+  b: Record<string, unknown>,
+): boolean {
+  const aKeys = Object.keys(a);
+  const bKeys = Object.keys(b);
+  if (aKeys.length !== bKeys.length) return false;
+  for (const key of aKeys) {
+    if (!Object.hasOwn(b, key)) return false;
+    if (JSON.stringify(a[key]) !== JSON.stringify(b[key])) return false;
+  }
+  return true;
+}
+
+function agentStdMcpServerName(name: string): string {
+  return name.startsWith(AGENTSTD_MCP_SERVER_PREFIX)
+    ? name
+    : `${AGENTSTD_MCP_SERVER_PREFIX}${name}`;
+}
+
+async function readAgentInstructions(
+  agentInstructions: string,
+  id: string,
+  pathSources: ConfigPathSources | undefined,
+  projectRoot: string,
+  homeRoot: string,
+): Promise<{ content: string; missing: boolean; sourcePath: string }> {
+  const layer = pathSources?.agents?.[id];
+  const base = sourceRoot(layer, projectRoot, homeRoot);
+  const sourcePath = path.resolve(base, agentInstructions);
+  const missing = !(await fileExists(sourcePath));
+  const content = missing ? '' : await fs.readFile(sourcePath, 'utf8');
+  return { content, missing, sourcePath };
 }
 
 export async function syncClaudeAgents(
   projectRoot: string,
+  outputRoot: string,
   config: AgentStdConfig,
   operations: FileOperation[],
   dryRun?: boolean,
-): Promise<string[]> {
+  homeRoot?: string,
+  pathSources?: ConfigPathSources,
+): Promise<{ changed: string[]; warnings: string[] }> {
   const changed: string[] = [];
+  const warnings: string[] = [];
+  const resolvedHomeRoot = homeRoot ?? projectRoot;
   for (const [id, agent] of Object.entries(agentsOf(config))) {
-    const sourcePath = path.resolve(projectRoot, agent.instructions);
-    const content = await fs.readFile(sourcePath, 'utf8').catch(() => '');
-    const targetPath = path.join(claudeAgentsDir(projectRoot), `${id}.md`);
+    const { content, missing, sourcePath } = await readAgentInstructions(
+      agent.instructions,
+      id,
+      pathSources,
+      projectRoot,
+      resolvedHomeRoot,
+    );
+    if (missing) warnings.push(`agent "${id}" instructions file not found: ${sourcePath}`);
+    const targetPath = path.join(claudeAgentsDir(outputRoot), `${id}.md`);
     const targetExists = await fileExists(targetPath);
     const next = renderClaudeAgent(agent.description, agent.tools, content);
     const current = targetExists ? await fs.readFile(targetPath, 'utf8') : null;
@@ -83,7 +154,7 @@ export async function syncClaudeAgents(
 
     operations.push({
       type: targetExists ? 'update-file' : 'create-file',
-      path: path.relative(projectRoot, targetPath) || targetPath,
+      path: path.relative(outputRoot, targetPath) || targetPath,
     });
     if (!dryRun) {
       await fs.ensureDir(path.dirname(targetPath));
@@ -91,7 +162,16 @@ export async function syncClaudeAgents(
     }
     changed.push(path.join('.claude', 'agents', `${id}.md`));
   }
-  return changed;
+  const removed = await removeStaleAgentFiles(
+    claudeAgentsDir(outputRoot),
+    Object.keys(agentsOf(config)),
+    '.md',
+    outputRoot,
+    operations,
+    dryRun,
+  );
+  changed.push(...removed.map((id) => path.join('.claude', 'agents', `${id}.md`)));
+  return { changed, warnings };
 }
 
 export function compileClaudePermissions(config: AgentStdConfig): Record<string, string[]> {
@@ -107,7 +187,7 @@ export function compileClaudePermissions(config: AgentStdConfig): Record<string,
 }
 
 export async function syncCodexConfigToml(
-  projectRoot: string,
+  outputRoot: string,
   config: AgentStdConfig,
   operations: FileOperation[],
   dryRun?: boolean,
@@ -126,10 +206,24 @@ export async function syncCodexConfigToml(
     );
   }
 
-  if (blocks.length === 0) return [];
-
-  const filePath = codexConfigPath(projectRoot);
+  const filePath = codexConfigPath(outputRoot);
   const current = (await fs.readFile(filePath, 'utf8').catch(() => '')) as string;
+  if (blocks.length === 0) {
+    const { text, changed } = removeManagedBlock(current, 'codex-config', {
+      commentStyle: 'hash',
+    });
+    if (!changed) return [];
+    operations.push({
+      type: text.trim().length === 0 ? 'remove-file' : 'update-file',
+      path: path.relative(outputRoot, filePath) || filePath,
+    });
+    if (!dryRun) {
+      if (text.trim().length === 0) await fs.remove(filePath);
+      else await fs.writeFile(filePath, text);
+    }
+    return ['.codex/config.toml'];
+  }
+
   const { text, changed } = upsertManagedBlock(current, 'codex-config', blocks.join('\n\n'), {
     commentStyle: 'hash',
   });
@@ -144,7 +238,7 @@ export async function syncCodexConfigToml(
 
   operations.push({
     type: (await fileExists(filePath)) ? 'update-file' : 'create-file',
-    path: path.relative(projectRoot, filePath) || filePath,
+    path: path.relative(outputRoot, filePath) || filePath,
   });
   if (!dryRun) {
     await fs.ensureDir(path.dirname(filePath));
@@ -154,16 +248,24 @@ export async function syncCodexConfigToml(
 }
 
 export async function syncCodexRules(
-  projectRoot: string,
+  outputRoot: string,
   config: AgentStdConfig,
   operations: FileOperation[],
   dryRun?: boolean,
 ): Promise<string[]> {
   const rules = renderCodexRules(config);
-  if (!rules) return [];
-
-  const filePath = codexAgentStdRulesPath(projectRoot);
+  const filePath = codexAgentStdRulesPath(outputRoot);
   const current = await fs.readFile(filePath, 'utf8').catch(() => null);
+  if (!rules) {
+    if (current === null) return [];
+    operations.push({
+      type: 'remove-file',
+      path: path.relative(outputRoot, filePath) || filePath,
+    });
+    if (!dryRun) await fs.remove(filePath);
+    return ['.codex/rules/agentstd.rules'];
+  }
+
   if (current === rules) {
     operations.push({
       type: 'skip',
@@ -175,7 +277,7 @@ export async function syncCodexRules(
 
   operations.push({
     type: current === null ? 'create-file' : 'update-file',
-    path: path.relative(projectRoot, filePath) || filePath,
+    path: path.relative(outputRoot, filePath) || filePath,
   });
   if (!dryRun) {
     await fs.ensureDir(path.dirname(filePath));
@@ -186,15 +288,26 @@ export async function syncCodexRules(
 
 export async function syncCodexAgents(
   projectRoot: string,
+  outputRoot: string,
   config: AgentStdConfig,
   operations: FileOperation[],
   dryRun?: boolean,
-): Promise<string[]> {
+  homeRoot?: string,
+  pathSources?: ConfigPathSources,
+): Promise<{ changed: string[]; warnings: string[] }> {
   const changed: string[] = [];
+  const warnings: string[] = [];
+  const resolvedHomeRoot = homeRoot ?? projectRoot;
   for (const [id, agent] of Object.entries(agentsOf(config))) {
-    const sourcePath = path.resolve(projectRoot, agent.instructions);
-    const content = await fs.readFile(sourcePath, 'utf8').catch(() => '');
-    const filePath = path.join(codexAgentsDir(projectRoot), `${id}.toml`);
+    const { content, missing, sourcePath } = await readAgentInstructions(
+      agent.instructions,
+      id,
+      pathSources,
+      projectRoot,
+      resolvedHomeRoot,
+    );
+    if (missing) warnings.push(`agent "${id}" instructions file not found: ${sourcePath}`);
+    const filePath = path.join(codexAgentsDir(outputRoot), `${id}.toml`);
     const next = renderCodexAgent(agent.description, content, agent.tools);
     const current = await fs.readFile(filePath, 'utf8').catch(() => null);
 
@@ -209,7 +322,7 @@ export async function syncCodexAgents(
 
     operations.push({
       type: current === null ? 'create-file' : 'update-file',
-      path: path.relative(projectRoot, filePath) || filePath,
+      path: path.relative(outputRoot, filePath) || filePath,
     });
     if (!dryRun) {
       await fs.ensureDir(path.dirname(filePath));
@@ -217,11 +330,50 @@ export async function syncCodexAgents(
     }
     changed.push(path.join('.codex', 'agents', `${id}.toml`));
   }
-  return changed;
+  const removed = await removeStaleAgentFiles(
+    codexAgentsDir(outputRoot),
+    Object.keys(agentsOf(config)),
+    '.toml',
+    outputRoot,
+    operations,
+    dryRun,
+  );
+  changed.push(...removed.map((id) => path.join('.codex', 'agents', `${id}.toml`)));
+  return { changed, warnings };
+}
+
+async function removeStaleAgentFiles(
+  agentsDir: string,
+  activeAgentIds: string[],
+  extension: string,
+  outputRoot: string,
+  operations: FileOperation[],
+  dryRun?: boolean,
+): Promise<string[]> {
+  const active = new Set(activeAgentIds.map((id) => `${id}${extension}`));
+  const entries = await fs.readdir(agentsDir, { withFileTypes: true }).catch(() => []);
+  const removed: string[] = [];
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.endsWith(extension) || active.has(entry.name)) continue;
+    const filePath = path.join(agentsDir, entry.name);
+    const content = await fs.readFile(filePath, 'utf8').catch(() => '');
+    if (!isAgentStdAgentFile(content)) continue;
+    operations.push({
+      type: 'remove-file',
+      path: path.relative(outputRoot, filePath) || filePath,
+    });
+    if (!dryRun) await fs.remove(filePath);
+    removed.push(path.basename(entry.name, extension));
+  }
+  return removed;
+}
+
+function isAgentStdAgentFile(content: string): boolean {
+  return content.includes('agentstd_managed = true') || content.includes('agentstd-managed: true');
 }
 
 function renderClaudeAgent(description: string, tools: string[], body: string): string {
-  const lines = ['---', `description: ${description}`];
+  const lines = ['---', `description: ${description}`, 'agentstd-managed: true'];
   if (tools.length > 0) lines.push(`tools: ${tools.join(', ')}`);
   lines.push('---', '', body.trim(), '');
   return lines.join('\n');
@@ -229,6 +381,7 @@ function renderClaudeAgent(description: string, tools: string[], body: string): 
 
 function renderCodexAgent(description: string, instructions: string, tools: string[]): string {
   const values: Record<string, unknown> = {
+    agentstd_managed: true,
     description,
     developer_instructions: instructions.trim(),
   };

@@ -2,8 +2,8 @@ import path from 'node:path';
 import fs from 'fs-extra';
 import { copyDir, ensureDir, fileExists } from '../../core/fs';
 import { claudeSkillsDir, homeRoot } from '../../core/paths';
-import { resolveSkillSources } from '../../core/skill-resolve';
 import { listMergedSkills } from '../../core/skill';
+import { resolveSkillSources } from '../../core/skill-resolve';
 import type { FileOperation, SyncContext } from '../../core/types';
 
 export async function syncClaudeSkills(
@@ -11,10 +11,17 @@ export async function syncClaudeSkills(
   existingOperations: FileOperation[],
 ): Promise<{ changed: string[]; operations: FileOperation[] }> {
   const changed: string[] = [];
-  const destSkills = claudeSkillsDir(ctx.projectRoot);
+  const outputRoot = ctx.outputRoot ?? ctx.projectRoot;
+  const destSkills = claudeSkillsDir(outputRoot);
 
   const homeRootResolved = ctx.homeRoot ?? homeRoot();
-  const sources = resolveSkillSources(ctx.projectRoot, ctx.config, homeRootResolved);
+  const sources = resolveSkillSources(
+    ctx.projectRoot,
+    ctx.config,
+    homeRootResolved,
+    ctx.scope ?? 'project',
+    ctx.hasHomeConfig ?? true,
+  );
   const skills = await listMergedSkills(sources);
 
   if (skills.length === 0) {
@@ -25,7 +32,7 @@ export async function syncClaudeSkills(
   if (!destExists) {
     existingOperations.push({
       type: 'create-dir',
-      dir: path.relative(ctx.projectRoot, destSkills) || destSkills,
+      dir: path.relative(outputRoot, destSkills) || destSkills,
     });
   }
 
@@ -51,7 +58,7 @@ export async function syncClaudeSkills(
       }
     }
 
-    const relDest = path.relative(ctx.projectRoot, destSkills) || destSkills;
+    const relDest = path.relative(outputRoot, destSkills) || destSkills;
     const fullDest = path.join(relDest, skill.dirName);
     const fromPath =
       skill.source === 'home'

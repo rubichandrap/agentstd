@@ -2,12 +2,13 @@ import path from 'node:path';
 import fs from 'fs-extra';
 import matter from 'gray-matter';
 import pc from 'picocolors';
-import { ConfigValidationError, loadMergedConfig } from '../../core/config-merge';
+import { ConfigValidationError } from '../../core/config-merge';
 import { fileExists } from '../../core/fs';
 import { log } from '../../core/logger';
 import { homeRoot } from '../../core/paths';
 import { listMergedSkills } from '../../core/skill';
 import { resolveSkillSources } from '../../core/skill-resolve';
+import { loadAgentStdContext } from './sync-scope';
 
 export interface SkillsOptions {
   projectOnly?: boolean;
@@ -15,16 +16,18 @@ export interface SkillsOptions {
 
 async function loadSkillSets(options?: SkillsOptions) {
   const root = process.cwd();
+  const resolvedHomeRoot = homeRoot();
   const configPath = path.join(root, '.agentstd.yaml');
   if (!(await fileExists(configPath))) {
     log.error('.agentstd.yaml not found. Run: agentstd init');
     process.exit(1);
   }
   try {
-    const { config } = await loadMergedConfig(root, homeRoot(), options?.projectOnly);
-    const sources = resolveSkillSources(root, config, homeRoot());
+    const loaded = await loadAgentStdContext(root, resolvedHomeRoot, options?.projectOnly);
+    const { config, scope, hasHomeConfig } = loaded;
+    const sources = resolveSkillSources(root, config, resolvedHomeRoot, scope, hasHomeConfig);
     const skills = await listMergedSkills(sources);
-    return { config, sources, skills };
+    return { config, sources, skills, scope, hasHomeConfig };
   } catch (err) {
     if (err instanceof ConfigValidationError) {
       log.error('Invalid config:');

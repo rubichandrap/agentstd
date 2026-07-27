@@ -96,3 +96,7 @@ export function codexAgentsDir(root: string): string {
 export function agentsMdPath(root: string): string {
   return path.join(root, 'AGENTS.md');
 }
+
+export function codexAgentsMdPath(root: string): string {
+  return path.join(codexDir(root), 'AGENTS.md');
+}

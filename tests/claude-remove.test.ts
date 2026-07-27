@@ -50,10 +50,7 @@ describe('Claude adapter remove', () => {
   }
 
   async function seedProject(): Promise<void> {
-    await fs.outputFile(
-      path.join(tmpDir, '.agentstd', 'instructions', 'shared.md'),
-      '# Shared\n',
-    );
+    await fs.outputFile(path.join(tmpDir, '.agentstd', 'instructions', 'shared.md'), '# Shared\n');
     await fs.outputFile(
       path.join(tmpDir, '.agentstd', 'instructions', 'reviewer.md'),
       'You are a reviewer.',
@@ -105,6 +102,7 @@ describe('Claude adapter remove', () => {
     expect(hooks[0].hooks[0].command).toBe('echo user-hook');
     // Permissions key gone entirely (only agentstd entries existed).
     expect(finalSettings.permissions).toBeUndefined();
+    expect(finalSettings._agentstd).toBeUndefined();
 
     // User MCP server preserved, agentstd:foo gone.
     const finalMcp = await fs.readJson(mcpPath);
@@ -112,7 +110,9 @@ describe('Claude adapter remove', () => {
 
     // Agent file and skill dir gone.
     expect(await fs.pathExists(path.join(tmpDir, '.claude', 'agents', 'reviewer.md'))).toBe(false);
-    expect(await fs.pathExists(path.join(tmpDir, '.claude', 'skills', 'example-skill'))).toBe(false);
+    expect(await fs.pathExists(path.join(tmpDir, '.claude', 'skills', 'example-skill'))).toBe(
+      false,
+    );
   });
 
   it('is a no-op when nothing was synced', async () => {
@@ -133,5 +133,36 @@ describe('Claude adapter remove', () => {
     expect(result.removed).toContain('.claude/settings.json');
     expect(await fs.pathExists(path.join(tmpDir, '.claude', 'agents', 'reviewer.md'))).toBe(true);
     expect(await fs.pathExists(path.join(tmpDir, '.claude', 'skills', 'example-skill'))).toBe(true);
+  });
+
+  it('does not remove home skill copies when project has no home config', async () => {
+    await seedProject();
+    const homeRoot = path.join(tmpDir, 'home');
+    await fs.outputFile(
+      path.join(homeRoot, '.agents', 'skills', 'home-skill', 'SKILL.md'),
+      '---\nname: home-skill\ndescription: home\n---\n\nHome',
+    );
+    await fs.outputFile(
+      path.join(tmpDir, '.claude', 'skills', 'home-skill', 'SKILL.md'),
+      '---\nname: home-skill\ndescription: copied\n---\n\nCopied',
+    );
+    await claudeAdapter.sync({
+      ...makeCtx(),
+      homeRoot,
+      hasHomeConfig: false,
+    });
+
+    const result = await claudeAdapter.remove({
+      ...removeCtx(),
+      homeRoot,
+      hasHomeConfig: false,
+    });
+
+    expect(result.removed).toContain('.claude/skills/example-skill');
+    expect(result.removed).not.toContain('.claude/skills/home-skill');
+    expect(await fs.pathExists(path.join(tmpDir, '.claude', 'skills', 'example-skill'))).toBe(
+      false,
+    );
+    expect(await fs.pathExists(path.join(tmpDir, '.claude', 'skills', 'home-skill'))).toBe(true);
   });
 });

@@ -2,15 +2,17 @@ import os from 'node:os';
 import { describe, expect, it } from 'vitest';
 import {
   agentStdDir,
+  agentsMdPath,
   claudeDir,
   claudeSettingsPath,
   claudeSkillsDir,
+  codexAgentsMdPath,
   configPath,
   getProjectRoot,
   homeAgentStdConfigPath,
   homeAgentsSkillsDir,
-  homeInstructionsDir,
   homeHooksDir,
+  homeInstructionsDir,
   homeRoot,
   hooksDir,
   instructionsDir,
@@ -58,6 +60,14 @@ describe('paths', () => {
 
   it('builds claudeSkillsDir', () => {
     expect(claudeSkillsDir(root)).toBe('/home/user/project/.claude/skills');
+  });
+
+  it('builds root AGENTS.md path', () => {
+    expect(agentsMdPath(root)).toBe('/home/user/project/AGENTS.md');
+  });
+
+  it('builds Codex global AGENTS.md path', () => {
+    expect(codexAgentsMdPath(root)).toBe('/home/user/project/.codex/AGENTS.md');
   });
 
   describe('home paths', () => {

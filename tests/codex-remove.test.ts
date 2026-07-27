@@ -50,10 +50,7 @@ describe('Codex adapter remove', () => {
   }
 
   async function seedProject(): Promise<void> {
-    await fs.outputFile(
-      path.join(tmpDir, '.agentstd', 'instructions', 'shared.md'),
-      '# Shared\n',
-    );
+    await fs.outputFile(path.join(tmpDir, '.agentstd', 'instructions', 'shared.md'), '# Shared\n');
     await fs.outputFile(
       path.join(tmpDir, '.agentstd', 'instructions', 'reviewer.md'),
       'You are a reviewer.',

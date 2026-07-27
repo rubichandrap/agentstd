@@ -1,6 +1,7 @@
 import type { AgentStdConfig } from './config';
+import type { ConfigLayer, ConfigPathSources } from './config-merge';
 
-export type { AgentStdConfig };
+export type { AgentStdConfig, ConfigLayer, ConfigPathSources };
 
 export type Capability =
   | 'native'
@@ -22,22 +23,33 @@ export interface AgentCapabilities {
 
 export interface SyncContext {
   projectRoot: string;
+  outputRoot?: string;
+  scope?: 'project' | 'global';
   config: AgentStdConfig;
   dryRun?: boolean;
   homeRoot?: string;
+  hasHomeConfig?: boolean;
+  pathSources?: ConfigPathSources;
 }
 
 export interface DoctorContext {
   projectRoot: string;
+  outputRoot?: string;
+  scope?: 'project' | 'global';
   config: AgentStdConfig;
   homeRoot?: string;
+  hasHomeConfig?: boolean;
+  pathSources?: ConfigPathSources;
 }
 
 export interface RemoveContext {
   projectRoot: string;
+  outputRoot?: string;
+  scope?: 'project' | 'global';
   config: AgentStdConfig;
   dryRun?: boolean;
   homeRoot?: string;
+  hasHomeConfig?: boolean;
 }
 
 export type FileOperation =

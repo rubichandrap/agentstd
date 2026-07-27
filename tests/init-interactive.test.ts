@@ -1,8 +1,8 @@
 import os from 'node:os';
 import path from 'node:path';
 import fs from 'fs-extra';
-import YAML from 'yaml';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import YAML from 'yaml';
 import { initCmd } from '../src/cli/commands/init';
 
 describe('init interactive target selection', () => {
@@ -55,6 +55,20 @@ describe('init interactive target selection', () => {
     await initCmd({ interactive: false, targets: ['claude', 'codex'] });
     const config = await loadConfig();
     expect(config.targets).toEqual(['claude', 'codex']);
+  });
+
+  it('rejects unknown --target flags without writing config', async () => {
+    const exit = process.exit;
+    process.exit = ((code?: number) => {
+      throw new Error(`exit ${code ?? 0}`);
+    }) as never;
+
+    await expect(initCmd({ interactive: false, targets: ['nonsense'] })).rejects.toThrow(
+      'exit 1',
+    );
+
+    process.exit = exit;
+    expect(await fs.pathExists(path.join(projectDir, '.agentstd.yaml'))).toBe(false);
   });
 
   it('prompts via the injected seam when interactive and no targets given', async () => {

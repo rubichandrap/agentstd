@@ -6,11 +6,12 @@ import {
   agentsMdPath,
   codexAgentStdRulesPath,
   codexAgentsDir,
+  codexAgentsMdPath,
   codexConfigPath,
   codexHooksPath,
 } from '../../core/paths';
 import type { FileOperation, RemoveContext, RemoveResult } from '../../core/types';
-import { isAgentStdHook, readCodexHooks } from './hooks';
+import { codexHookCommand, isAgentStdHook, readCodexHooks } from './hooks';
 
 interface HooksConfig {
   hooks?: Record<string, unknown[]>;
@@ -22,48 +23,55 @@ export async function remove(ctx: RemoveContext): Promise<RemoveResult> {
   const warnings: string[] = [];
   const operations: FileOperation[] = [];
   const { projectRoot, dryRun } = ctx;
+  const outputRoot = ctx.outputRoot ?? projectRoot;
+  const scope = ctx.scope ?? 'project';
+  const instructionsPath =
+    scope === 'global' ? codexAgentsMdPath(outputRoot) : agentsMdPath(outputRoot);
+  const relativeInstructionsPath = path.relative(outputRoot, instructionsPath) || instructionsPath;
 
   // AGENTS.md — remove the managed instructions block.
-  const agentsMd = agentsMdPath(projectRoot);
-  if (await fileExists(agentsMd)) {
+  if (await fileExists(instructionsPath)) {
     try {
-      const current = await fs.readFile(agentsMd, 'utf8');
+      const current = await fs.readFile(instructionsPath, 'utf8');
       const { text, changed } = removeManagedBlock(current, 'instructions');
       if (changed) {
         operations.push({
           type: 'update-file',
-          path: path.relative(projectRoot, agentsMd) || agentsMd,
+          path: relativeInstructionsPath,
         });
         if (!dryRun) {
-          if (text.trim().length === 0) await fs.remove(agentsMd);
-          else await fs.writeFile(agentsMd, text);
+          if (text.trim().length === 0) await fs.remove(instructionsPath);
+          else await fs.writeFile(instructionsPath, text);
         }
-        removed.push('AGENTS.md');
+        removed.push(relativeInstructionsPath);
       }
     } catch (err) {
-      warnings.push(`Failed to clean AGENTS.md: ${(err as Error).message}`);
+      warnings.push(`Failed to clean ${relativeInstructionsPath}: ${(err as Error).message}`);
     }
   }
 
   // .codex/hooks.json — strip agentstd hooks.
-  const hooksPath = codexHooksPath(projectRoot);
+  const hooksPath = codexHooksPath(outputRoot);
   if (await fileExists(hooksPath)) {
     try {
       const current = (await readCodexHooks(hooksPath)) as HooksConfig;
       const hooks = current.hooks ?? {};
       const newHooks: Record<string, unknown[]> = {};
       let hooksChanged = false;
+      const expected = ctx.config.hooks.preToolUse
+        ? codexHookCommand(ctx.config.hooks.preToolUse.command)
+        : undefined;
       for (const [key, entries] of Object.entries(hooks)) {
-        const filtered = (entries as { hooks?: { command?: string }[]; _agentstd?: string }[]).filter(
-          (h) => !isAgentStdHook(h as never),
-        );
+        const filtered = (
+          entries as { hooks?: { command?: string }[]; _agentstd?: string }[]
+        ).filter((h) => !isAgentStdHook(h as never, expected));
         if (filtered.length !== entries.length) hooksChanged = true;
         if (filtered.length > 0) newHooks[key] = filtered;
       }
       if (hooksChanged) {
         operations.push({
           type: 'update-file',
-          path: path.relative(projectRoot, hooksPath) || hooksPath,
+          path: path.relative(outputRoot, hooksPath) || hooksPath,
         });
         if (!dryRun) {
           const out: HooksConfig = { ...current };
@@ -80,15 +88,17 @@ export async function remove(ctx: RemoveContext): Promise<RemoveResult> {
   }
 
   // .codex/config.toml — remove the managed codex-config block.
-  const configPath = codexConfigPath(projectRoot);
+  const configPath = codexConfigPath(outputRoot);
   if (await fileExists(configPath)) {
     try {
       const current = await fs.readFile(configPath, 'utf8');
-      const { text, changed } = removeManagedBlock(current, 'codex-config', { commentStyle: 'hash' });
+      const { text, changed } = removeManagedBlock(current, 'codex-config', {
+        commentStyle: 'hash',
+      });
       if (changed) {
         operations.push({
           type: 'update-file',
-          path: path.relative(projectRoot, configPath) || configPath,
+          path: path.relative(outputRoot, configPath) || configPath,
         });
         if (!dryRun) {
           if (text.trim().length === 0) await fs.remove(configPath);
@@ -102,24 +112,24 @@ export async function remove(ctx: RemoveContext): Promise<RemoveResult> {
   }
 
   // .codex/rules/agentstd.rules — delete.
-  const rulesPath = codexAgentStdRulesPath(projectRoot);
+  const rulesPath = codexAgentStdRulesPath(outputRoot);
   if (await fileExists(rulesPath)) {
     operations.push({
       type: 'remove-file',
-      path: path.relative(projectRoot, rulesPath) || rulesPath,
+      path: path.relative(outputRoot, rulesPath) || rulesPath,
     });
     if (!dryRun) await fs.remove(rulesPath);
     removed.push('.codex/rules/agentstd.rules');
   }
 
   // .codex/agents/<id>.toml for each configured agent.
-  const agentsDir = codexAgentsDir(projectRoot);
-  for (const id of Object.keys(ctx.config.agents)) {
+  const agentsDir = codexAgentsDir(outputRoot);
+  for (const id of Object.keys(ctx.config.agents ?? {})) {
     const file = path.join(agentsDir, `${id}.toml`);
     if (await fileExists(file)) {
       operations.push({
         type: 'remove-file',
-        path: path.relative(projectRoot, file) || file,
+        path: path.relative(outputRoot, file) || file,
       });
       if (!dryRun) await fs.remove(file);
       removed.push(`.codex/agents/${id}.toml`);

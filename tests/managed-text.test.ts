@@ -26,7 +26,8 @@ describe('removeManagedBlock', () => {
   });
 
   it('deletes the whole file content when the block was the only content', () => {
-    const current = '<!-- agentstd:start instructions -->\nUse pnpm.\n<!-- agentstd:end instructions -->\n';
+    const current =
+      '<!-- agentstd:start instructions -->\nUse pnpm.\n<!-- agentstd:end instructions -->\n';
     const result = removeManagedBlock(current, 'instructions');
     expect(result.changed).toBe(true);
     expect(result.text).toBe('');

@@ -1,6 +1,5 @@
 import path from 'node:path';
 import fs from 'fs-extra';
-import { compileClaudePermissions } from '../../core/provider-config';
 import { fileExists, readJsonIfExists, writeJson } from '../../core/fs';
 import {
   claudeAgentsDir,
@@ -9,16 +8,26 @@ import {
   homeRoot,
   mcpConfigPath,
 } from '../../core/paths';
+import { compileClaudePermissions } from '../../core/provider-config';
 import { listMergedSkills } from '../../core/skill';
 import { resolveSkillSources } from '../../core/skill-resolve';
 import type { FileOperation, RemoveContext, RemoveResult } from '../../core/types';
-import { isAgentStdHook, readSettings } from './settings';
+import {
+  claudeHookCommand,
+  DEFAULT_PROJECT_HOOK_COMMAND,
+  isAgentStdHook,
+  readSettings,
+} from './settings';
 
 const AGENTSTD_MCP_PREFIX = 'agentstd:';
 
 interface SettingsShape {
   hooks?: Record<string, unknown[]>;
   permissions?: Record<string, string[]>;
+  _agentstd?: {
+    permissions?: Record<string, string[]>;
+    [key: string]: unknown;
+  };
   [key: string]: unknown;
 }
 
@@ -27,17 +36,26 @@ export async function remove(ctx: RemoveContext): Promise<RemoveResult> {
   const warnings: string[] = [];
   const operations: FileOperation[] = [];
   const { projectRoot, config, dryRun } = ctx;
+  const outputRoot = ctx.outputRoot ?? projectRoot;
 
   // .claude/settings.json — strip agentstd hooks and compiled permissions.
-  const settingsPath = claudeSettingsPath(projectRoot);
+  const settingsPath = claudeSettingsPath(outputRoot);
   if (await fileExists(settingsPath)) {
     try {
       const settings = (await readSettings(settingsPath)) as SettingsShape;
       let changed = false;
 
       if (settings.hooks?.PreToolUse) {
-        const existing = settings.hooks.PreToolUse as { hooks?: { command?: string }[]; _agentstd?: string }[];
-        const filtered = existing.filter((h) => !isAgentStdHook(h as never));
+        const existing = settings.hooks.PreToolUse as {
+          hooks?: { command?: string }[];
+          _agentstd?: string;
+        }[];
+        const expected = config.hooks.preToolUse
+          ? claudeHookCommand(
+              config.hooks.preToolUse.command ?? DEFAULT_PROJECT_HOOK_COMMAND,
+            )
+          : undefined;
+        const filtered = existing.filter((h) => !isAgentStdHook(h as never, expected));
         if (filtered.length !== existing.length) {
           if (filtered.length > 0) settings.hooks.PreToolUse = filtered as unknown[];
           else {
@@ -48,13 +66,22 @@ export async function remove(ctx: RemoveContext): Promise<RemoveResult> {
         }
       }
 
-      const agentstdPerms = compileClaudePermissions(config);
+      const agentstdPerms = settings._agentstd?.permissions ?? compileClaudePermissions(config);
       const currentPerms = settings.permissions ?? {};
       const newPerms: Record<string, string[]> = {};
       let permsChanged = false;
       for (const [key, entries] of Object.entries(currentPerms)) {
-        const toRemove = new Set(agentstdPerms[key] ?? []);
-        const kept = entries.filter((e) => !toRemove.has(e));
+        // Subtract exactly one copy per AgentStd entry so a user-authored
+        // duplicate of an AgentStd entry survives uninstall.
+        const toSubtract = new Set(agentstdPerms[key] ?? []);
+        const kept: string[] = [];
+        for (const entry of entries) {
+          if (toSubtract.has(entry)) {
+            toSubtract.delete(entry);
+            continue;
+          }
+          kept.push(entry);
+        }
         if (kept.length !== entries.length) permsChanged = true;
         if (kept.length > 0) newPerms[key] = kept;
       }
@@ -64,10 +91,15 @@ export async function remove(ctx: RemoveContext): Promise<RemoveResult> {
         changed = true;
       }
 
+      if (settings._agentstd) {
+        delete settings._agentstd;
+        changed = true;
+      }
+
       if (changed) {
         operations.push({
           type: 'update-file',
-          path: path.relative(projectRoot, settingsPath) || settingsPath,
+          path: path.relative(outputRoot, settingsPath) || settingsPath,
         });
         if (!dryRun) {
           if (Object.keys(settings).length === 0) await fs.remove(settingsPath);
@@ -81,10 +113,11 @@ export async function remove(ctx: RemoveContext): Promise<RemoveResult> {
   }
 
   // .mcp.json — strip agentstd: prefixed servers.
-  const mcpPath = mcpConfigPath(projectRoot);
+  const mcpPath = mcpConfigPath(outputRoot);
   if (await fileExists(mcpPath)) {
     try {
-      const current = (await readJsonIfExists<{ mcpServers?: Record<string, unknown> }>(mcpPath)) ?? {};
+      const current =
+        (await readJsonIfExists<{ mcpServers?: Record<string, unknown> }>(mcpPath)) ?? {};
       const servers = current.mcpServers ?? {};
       const kept: Record<string, unknown> = {};
       let mcpChanged = false;
@@ -98,7 +131,7 @@ export async function remove(ctx: RemoveContext): Promise<RemoveResult> {
       if (mcpChanged) {
         operations.push({
           type: 'update-file',
-          path: path.relative(projectRoot, mcpPath) || mcpPath,
+          path: path.relative(outputRoot, mcpPath) || mcpPath,
         });
         if (!dryRun) {
           if (Object.keys(kept).length === 0) await fs.remove(mcpPath);
@@ -112,13 +145,13 @@ export async function remove(ctx: RemoveContext): Promise<RemoveResult> {
   }
 
   // .claude/agents/<id>.md for each configured agent.
-  const agentsDir = claudeAgentsDir(projectRoot);
-  for (const id of Object.keys(config.agents)) {
+  const agentsDir = claudeAgentsDir(outputRoot);
+  for (const id of Object.keys(config.agents ?? {})) {
     const file = path.join(agentsDir, `${id}.md`);
     if (await fileExists(file)) {
       operations.push({
         type: 'remove-file',
-        path: path.relative(projectRoot, file) || file,
+        path: path.relative(outputRoot, file) || file,
       });
       if (!dryRun) await fs.remove(file);
       removed.push(`.claude/agents/${id}.md`);
@@ -127,15 +160,21 @@ export async function remove(ctx: RemoveContext): Promise<RemoveResult> {
 
   // .claude/skills/<dirName> for each merged skill.
   const homeRootResolved = ctx.homeRoot ?? homeRoot();
-  const sources = resolveSkillSources(projectRoot, config, homeRootResolved);
+  const sources = resolveSkillSources(
+    projectRoot,
+    config,
+    homeRootResolved,
+    ctx.scope ?? 'project',
+    ctx.hasHomeConfig ?? true,
+  );
   const skills = await listMergedSkills(sources);
-  const skillsDest = claudeSkillsDir(projectRoot);
+  const skillsDest = claudeSkillsDir(outputRoot);
   for (const skill of skills) {
     const dir = path.join(skillsDest, skill.dirName);
     if (await fileExists(dir)) {
       operations.push({
         type: 'remove-dir',
-        path: path.relative(projectRoot, dir) || dir,
+        path: path.relative(outputRoot, dir) || dir,
       });
       if (!dryRun) await fs.remove(dir);
       removed.push(`.claude/skills/${skill.dirName}`);

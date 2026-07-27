@@ -1,8 +1,8 @@
 import os from 'node:os';
 import path from 'node:path';
 import fs from 'fs-extra';
-import YAML from 'yaml';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import YAML from 'yaml';
 import { loadMergedConfig } from '../src/core/config-merge';
 
 describe('loadMergedConfig', () => {
@@ -140,6 +140,82 @@ describe('loadMergedConfig', () => {
       await writeProjectConfig({ version: 1, projectOnly: true });
       const { config } = await loadMergedConfig(projectDir, homeDir);
       expect(config.version).toBe(1);
+    });
+  });
+
+  describe('agent merge rule (bug 4 regression)', () => {
+    it('project-defined agent id wins entirely; home-only fields do not leak in', async () => {
+      await writeHomeConfig({
+        version: 1,
+        agents: {
+          reviewer: {
+            description: 'Home description',
+            instructions: '.agentstd/agents/reviewer.md',
+            tools: ['read', 'bash'],
+          },
+        },
+      });
+      await writeProjectConfig({
+        version: 1,
+        agents: {
+          reviewer: {
+            description: 'Project description',
+            instructions: '.agentstd/agents/reviewer.md',
+          },
+        },
+      });
+      const { config } = await loadMergedConfig(projectDir, homeDir);
+      expect(config.agents?.reviewer?.description).toBe('Project description');
+      expect(config.agents?.reviewer?.tools ?? []).toEqual([]);
+    });
+
+    it('home-only agent ids are preserved alongside project-only agent ids', async () => {
+      await writeHomeConfig({
+        version: 1,
+        agents: {
+          homeAgent: {
+            description: 'home',
+            instructions: '.agentstd/agents/home.md',
+            tools: ['read'],
+          },
+        },
+      });
+      await writeProjectConfig({
+        version: 1,
+        agents: {
+          projAgent: {
+            description: 'proj',
+            instructions: '.agentstd/agents/proj.md',
+            tools: ['write'],
+          },
+        },
+      });
+      const { config } = await loadMergedConfig(projectDir, homeDir);
+      expect(config.agents?.homeAgent?.description).toBe('home');
+      expect(config.agents?.homeAgent?.tools).toEqual(['read']);
+      expect(config.agents?.projAgent?.description).toBe('proj');
+      expect(config.agents?.projAgent?.tools).toEqual(['write']);
+    });
+
+    it('project agent id replacing home agent id does not inherit home tools', async () => {
+      await writeHomeConfig({
+        version: 1,
+        agents: {
+          reviewer: {
+            description: 'home',
+            instructions: '.agentstd/agents/r.md',
+            tools: ['read', 'bash', 'write'],
+          },
+        },
+      });
+      await writeProjectConfig({
+        version: 1,
+        agents: {
+          reviewer: { description: 'project', instructions: '.agentstd/agents/r.md' },
+        },
+      });
+      const { config } = await loadMergedConfig(projectDir, homeDir);
+      expect(config.agents?.reviewer?.tools).toEqual([]);
     });
   });
 });

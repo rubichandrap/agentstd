@@ -1,6 +1,6 @@
 {
   "name": "agentstd",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Standardize hooks, skills, and shared instructions across AI coding agents.",
   "author": "rubichandrap",
   "repository": {

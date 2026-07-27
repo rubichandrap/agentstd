@@ -1,3 +1,4 @@
+import { spawn } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import fs from 'fs-extra';
@@ -63,6 +64,25 @@ describe('Sync integration', () => {
       expect(await fs.pathExists(path.join(tmpDir, '.agentstd', 'hooks', 'pretooluse.js'))).toBe(
         true,
       );
+    });
+
+    it('default pretooluse hook exits 0 for safe input and 2 for blocked input', async () => {
+      await initCmd();
+      const hookPath = path.join(tmpDir, '.agentstd', 'hooks', 'pretooluse.js');
+
+      const safe = await runHook(hookPath, {
+        tool_name: 'Bash',
+        tool_input: { command: 'pnpm test' },
+      });
+      const blocked = await runHook(hookPath, {
+        tool_name: 'Bash',
+        tool_input: { command: 'rm -rf dist' },
+      });
+      const hook = await fs.readFile(hookPath, 'utf8');
+
+      expect(safe.code).toBe(0);
+      expect(blocked.code).toBe(2);
+      expect(hook).toContain('dangerous command detected');
     });
 
     it('creates .agents/skills/example-skill/SKILL.md', async () => {
@@ -139,3 +159,31 @@ describe('Sync integration', () => {
     });
   });
 });
+
+function runHook(
+  hookPath: string,
+  input: unknown,
+): Promise<{ code: number | null; stderr: string }> {
+  const inputPath = path.join(path.dirname(hookPath), `.hook-input-${Date.now()}.json`);
+  return new Promise((resolve, reject) => {
+    fs.writeFileSync(inputPath, JSON.stringify(input));
+    const inputFd = fs.openSync(inputPath, 'r');
+    const child = spawn(process.execPath, [hookPath], {
+      stdio: [inputFd, 'ignore', 'pipe'],
+    });
+    let stderr = '';
+    child.stderr.on('data', (chunk) => {
+      stderr += String(chunk);
+    });
+    child.on('error', (error) => {
+      fs.closeSync(inputFd);
+      fs.removeSync(inputPath);
+      reject(error);
+    });
+    child.on('close', (code) => {
+      fs.closeSync(inputFd);
+      fs.removeSync(inputPath);
+      resolve({ code, stderr });
+    });
+  });
+}

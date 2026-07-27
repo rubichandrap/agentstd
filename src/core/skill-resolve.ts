@@ -6,15 +6,27 @@ export function resolveSkillSources(
   projectRoot: string,
   config: AgentStdConfig,
   homeRoot: string,
+  scope: 'project' | 'global' = 'project',
+  hasHomeConfig = true,
 ): SkillSource[] {
-  const projectSource: SkillSource = {
-    root: projectRoot,
-    dir: path.resolve(projectRoot, config.skills.dir),
-    label: 'project',
-  };
+  if (scope === 'global') {
+    return [
+      {
+        root: homeRoot,
+        dir: path.join(homeRoot, config.skills.homeDir),
+        label: 'home',
+      },
+    ];
+  }
 
-  if (config.projectOnly) {
-    return [projectSource];
+  if (config.projectOnly || !hasHomeConfig) {
+    return [
+      {
+        root: projectRoot,
+        dir: path.resolve(projectRoot, config.skills.dir),
+        label: 'project',
+      },
+    ];
   }
 
   return [
@@ -23,6 +35,10 @@ export function resolveSkillSources(
       dir: path.join(homeRoot, config.skills.homeDir),
       label: 'home',
     },
-    projectSource,
+    {
+      root: projectRoot,
+      dir: path.resolve(projectRoot, config.skills.dir),
+      label: 'project',
+    },
   ];
 }

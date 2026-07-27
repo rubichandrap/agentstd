@@ -1,8 +1,8 @@
 import os from 'node:os';
 import path from 'node:path';
 import fs from 'fs-extra';
-import YAML from 'yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import YAML from 'yaml';
 import { statusCmd } from '../src/cli/commands/status';
 
 describe('status command', () => {

@@ -41,6 +41,15 @@ describe('Claude settings', () => {
     expect(settings.hooks?.PreToolUse[0].matcher).toBe('Bash|Edit|Write|MultiEdit');
   });
 
+  it('renders the default project hook command with Claude project root placeholder', async () => {
+    await upsertPreToolUseHook(settingsPath, config);
+    const settings = await readSettings(settingsPath);
+    const claudeProjectDirPlaceholder = '$' + '{CLAUDE_PROJECT_DIR}';
+    expect(settings.hooks?.PreToolUse[0].hooks[0].command).toBe(
+      `node "${claudeProjectDirPlaceholder}/.agentstd/hooks/pretooluse.js"`,
+    );
+  });
+
   it('idempotent: running twice does not duplicate', async () => {
     await upsertPreToolUseHook(settingsPath, config);
     await upsertPreToolUseHook(settingsPath, config);
@@ -196,5 +205,126 @@ describe('Claude settings', () => {
     const settings = await readSettings(settingsPath);
     expect(settings.hooks?.PostToolUse).toHaveLength(1);
     expect(settings.hooks?.PreToolUse).toHaveLength(1);
+  });
+
+  it('does not duplicate a custom PreToolUse command on repeated sync', async () => {
+    const customConfig = {
+      ...config,
+      hooks: { preToolUse: { command: '/usr/local/bin/custom-hook' } },
+    };
+    await upsertPreToolUseHook(settingsPath, customConfig);
+    await upsertPreToolUseHook(settingsPath, customConfig);
+    await upsertPreToolUseHook(settingsPath, customConfig);
+    const settings = await readSettings(settingsPath);
+    expect(settings.hooks?.PreToolUse).toHaveLength(1);
+    expect(settings.hooks?.PreToolUse?.[0].hooks[0].command).toBe('/usr/local/bin/custom-hook');
+  });
+
+  it('updating the custom command replaces, not duplicates, the hook', async () => {
+    const customConfig = {
+      ...config,
+      hooks: { preToolUse: { command: '/usr/local/bin/custom-hook' } },
+    };
+    await upsertPreToolUseHook(settingsPath, customConfig);
+    const updated = {
+      ...config,
+      hooks: { preToolUse: { command: '/usr/local/bin/custom-hook-v2' } },
+    };
+    await upsertPreToolUseHook(settingsPath, updated);
+    const settings = await readSettings(settingsPath);
+    expect(settings.hooks?.PreToolUse).toHaveLength(1);
+    expect(settings.hooks?.PreToolUse?.[0].hooks[0].command).toBe(
+      '/usr/local/bin/custom-hook-v2',
+    );
+  });
+
+  it('preserves _agentstd marker on persisted hooks (for clean uninstall)', async () => {
+    await upsertPreToolUseHook(settingsPath, config);
+    const settings = await readSettings(settingsPath);
+    expect(settings.hooks?.PreToolUse?.[0]._agentstd).toBe('agentstd-pretooluse');
+  });
+
+  it('unions user allow with AgentStd allow instead of replacing it (bug 2 regression)', async () => {
+    await fs.writeFile(
+      settingsPath,
+      JSON.stringify({
+        permissions: { allow: ['Bash(git status)'] },
+      }),
+    );
+    const permConfig = {
+      ...config,
+      permissions: { commands: { allow: [['pnpm', 'test']] }, files: { denyRead: [], denyWrite: [] } },
+    };
+    await upsertPreToolUseHook(settingsPath, permConfig);
+    const settings = await readSettings(settingsPath);
+    expect(settings.permissions?.allow).toEqual(
+      expect.arrayContaining(['Bash(git status)', 'Bash(pnpm test)']),
+    );
+  });
+
+  it('preserves user deny entries when AgentStd adds its own (bug 2 regression)', async () => {
+    await fs.writeFile(
+      settingsPath,
+      JSON.stringify({
+        permissions: { deny: ['Read(.env)'] },
+      }),
+    );
+    const permConfig = {
+      ...config,
+      permissions: { commands: { allow: [], deny: [['rm', '-rf']] }, files: { denyRead: [], denyWrite: [] } },
+    };
+    await upsertPreToolUseHook(settingsPath, permConfig);
+    const settings = await readSettings(settingsPath);
+    expect(settings.permissions?.deny).toEqual(
+      expect.arrayContaining(['Bash(rm -rf)', 'Read(.env)']),
+    );
+  });
+
+  it('union is idempotent: re-sync does not duplicate entries', async () => {
+    const permConfig = {
+      ...config,
+      permissions: { commands: { allow: [['pnpm', 'test']] }, files: { denyRead: [], denyWrite: [] } },
+    };
+    await upsertPreToolUseHook(settingsPath, permConfig);
+    await upsertPreToolUseHook(settingsPath, permConfig);
+    const settings = await readSettings(settingsPath);
+    const allow = settings.permissions?.allow ?? [];
+    const count = allow.filter((e) => e === 'Bash(pnpm test)').length;
+    expect(count).toBe(1);
+  });
+
+  it('removes previous AgentStd permissions when the config changes', async () => {
+    await fs.writeFile(
+      settingsPath,
+      JSON.stringify({
+        permissions: { allow: ['Bash(git status)'] },
+      }),
+    );
+    const initial = {
+      ...config,
+      permissions: {
+        commands: { allow: [['pnpm', 'test']], prompt: [['git', 'push']], deny: [] },
+        files: { denyRead: ['.env'], denyWrite: [] },
+      },
+    };
+    await upsertPreToolUseHook(settingsPath, initial);
+
+    const next = {
+      ...config,
+      hooks: {},
+      permissions: {
+        commands: { allow: [['pnpm', 'lint']], prompt: [], deny: [] },
+        files: { denyRead: [], denyWrite: [] },
+      },
+    };
+    await upsertPreToolUseHook(settingsPath, next);
+
+    const settings = await readSettings(settingsPath);
+    expect(settings.permissions?.allow).toEqual(['Bash(git status)', 'Bash(pnpm lint)']);
+    expect(settings.permissions?.ask).toBeUndefined();
+    expect(settings.permissions?.deny).toBeUndefined();
+    expect(settings._agentstd).toEqual({
+      permissions: { allow: ['Bash(pnpm lint)'] },
+    });
   });
 });

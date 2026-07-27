@@ -1,7 +1,7 @@
 import path from 'node:path';
 import pc from 'picocolors';
 import { getAdapter } from '../../adapters';
-import { ConfigValidationError, loadMergedConfig } from '../../core/config-merge';
+import { ConfigValidationError } from '../../core/config-merge';
 import { fileExists, readDir } from '../../core/fs';
 import { log } from '../../core/logger';
 import {
@@ -12,6 +12,7 @@ import {
   hooksDir,
 } from '../../core/paths';
 import type { DoctorCheck, DoctorContext } from '../../core/types';
+import { loadAgentStdContext } from './sync-scope';
 
 function statusIcon(status: DoctorCheck['status']): string {
   switch (status) {
@@ -26,7 +27,9 @@ function statusIcon(status: DoctorCheck['status']): string {
 
 export async function doctorCmd(options?: { projectOnly?: boolean }): Promise<void> {
   const root = process.cwd();
+  const resolvedHomeRoot = homeRoot();
   const configPath = path.join(root, '.agentstd.yaml');
+  let healthy = true;
 
   log.info('AgentStd Doctor\n');
 
@@ -36,6 +39,7 @@ export async function doctorCmd(options?: { projectOnly?: boolean }): Promise<vo
   if (!(await fileExists(configPath))) {
     log.error('.agentstd.yaml not found');
     log.dim('  Run: agentstd init');
+    process.exit(1);
     return;
   }
   log.success('.agentstd.yaml found');
@@ -43,18 +47,28 @@ export async function doctorCmd(options?: { projectOnly?: boolean }): Promise<vo
   let configValid = false;
   let config = null;
   let isProjectOnly = false;
+  let scope: 'project' | 'global' = 'project';
+  let outputRoot = root;
+  let hasHomeConfig = false;
+  let pathSources: Awaited<ReturnType<typeof loadAgentStdContext>>['pathSources'] | undefined;
   try {
-    const merged = await loadMergedConfig(root, homeRoot(), options?.projectOnly);
-    config = merged.config;
+    const loaded = await loadAgentStdContext(root, resolvedHomeRoot, options?.projectOnly);
+    config = loaded.config;
+    scope = loaded.scope;
+    outputRoot = loaded.outputRoot;
+    hasHomeConfig = loaded.hasHomeConfig;
+    pathSources = loaded.pathSources;
     configValid = true;
     isProjectOnly = config.projectOnly;
-    if (isProjectOnly) {
+    if (scope === 'global') {
+      log.success('config valid (global sync scope)');
+    } else if (isProjectOnly) {
       log.success('config valid (project-only mode)');
     } else {
       log.success('config valid');
-      if (merged.sources.length > 1) {
+      if (loaded.sources.length > 1) {
         log.dim(
-          `  merged from: ${merged.sources.map((s) => s.replace(homeRoot(), '~')).join(', ')}`,
+          `  merged from: ${loaded.sources.map((s) => s.replace(resolvedHomeRoot, '~')).join(', ')}`,
         );
       }
     }
@@ -71,9 +85,11 @@ export async function doctorCmd(options?: { projectOnly?: boolean }): Promise<vo
 
   const projectHookExists = await fileExists(path.join(hooksDir(root), 'pretooluse.js'));
   const homeHookExists =
-    !isProjectOnly && (await fileExists(path.join(homeHooksDir(), 'pretooluse.js')));
+    !isProjectOnly &&
+    hasHomeConfig &&
+    (await fileExists(path.join(homeHooksDir(), 'pretooluse.js')));
   if (projectHookExists) {
-    log.success('preToolUse hook found (project)');
+    log.success(`preToolUse hook found (${scope === 'global' ? 'home' : 'project'})`);
   } else if (homeHookExists) {
     log.success('preToolUse hook found (home)');
   } else {
@@ -82,17 +98,24 @@ export async function doctorCmd(options?: { projectOnly?: boolean }): Promise<vo
   }
 
   if (config) {
-    const skDir = path.resolve(root, config.skills.dir);
+    const skDir =
+      scope === 'global'
+        ? path.join(resolvedHomeRoot, config.skills.homeDir)
+        : path.join(root, config.skills.dir);
     if (await fileExists(skDir)) {
-      log.success('project skills directory found');
-    } else if (!isProjectOnly) {
+      log.success(`${scope === 'global' ? 'home' : 'project'} skills directory found`);
+    } else if (!isProjectOnly && scope !== 'global') {
       log.warn('project skills directory not found');
-      log.dim('  Merged skills will pull from home only');
+      log.dim(
+        hasHomeConfig
+          ? '  Merged skills will pull from home only'
+          : '  No home config — nothing to merge',
+      );
     }
   }
 
-  // Home checks — skipped in project-only mode
-  if (!isProjectOnly) {
+  // Home checks — skipped in project-only mode or when no home config exists
+  if (!isProjectOnly && scope !== 'global' && hasHomeConfig) {
     log.info(`\n${pc.bold('Home')}`);
     const homeConfigExists = await fileExists(homeAgentStdConfigPath());
     if (homeConfigExists) {
@@ -110,6 +133,7 @@ export async function doctorCmd(options?: { projectOnly?: boolean }): Promise<vo
 
   if (!configValid || !config) {
     log.info('\nFix config issues, then run: agentstd sync');
+    process.exit(1);
     return;
   }
 
@@ -125,7 +149,15 @@ export async function doctorCmd(options?: { projectOnly?: boolean }): Promise<vo
 
     log.info(pc.bold(adapter.name));
 
-    const ctx: DoctorContext = { projectRoot: root, config, homeRoot: homeRoot() };
+    const ctx: DoctorContext = {
+      projectRoot: root,
+      outputRoot,
+      scope,
+      config,
+      homeRoot: resolvedHomeRoot,
+      hasHomeConfig,
+      pathSources,
+    };
     const result = await adapter.doctor(ctx);
     for (const check of result.checks) {
       const icon = statusIcon(check.status);
@@ -137,11 +169,19 @@ export async function doctorCmd(options?: { projectOnly?: boolean }): Promise<vo
           log.dim(`  ${check.message}`);
         }
       }
+      if (check.status === 'fail' || check.status === 'warn') {
+        healthy = false;
+      }
     }
   }
 
   // Summary
   log.info(`\n${pc.bold('Summary')}`);
-  log.success('Doctor check complete.');
-  log.info('If any checks failed, run: agentstd sync');
+  if (healthy) {
+    log.success('Doctor check complete.');
+  } else {
+    log.warn('Some checks failed or have warnings.');
+    log.info('Run: agentstd sync');
+    process.exit(1);
+  }
 }

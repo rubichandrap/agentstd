@@ -1,16 +1,13 @@
 import path from 'node:path';
 import pc from 'picocolors';
-import {
-  ConfigValidationError,
-  loadMergedConfig,
-  type MergedConfigResult,
-} from '../../core/config-merge';
+import { ConfigValidationError } from '../../core/config-merge';
 import { fileExists } from '../../core/fs';
 import { log } from '../../core/logger';
 import { homeRoot } from '../../core/paths';
 import { listMergedSkills } from '../../core/skill';
 import { resolveSkillSources } from '../../core/skill-resolve';
 import type { AgentStdConfig } from '../../core/types';
+import { loadAgentStdContext } from './sync-scope';
 
 export interface StatusOptions {
   projectOnly?: boolean;
@@ -18,6 +15,7 @@ export interface StatusOptions {
 
 export async function statusCmd(options?: StatusOptions): Promise<void> {
   const root = process.cwd();
+  const resolvedHomeRoot = homeRoot();
   const configPath = path.join(root, '.agentstd.yaml');
 
   log.info(pc.bold('AgentStd Status\n'));
@@ -28,9 +26,9 @@ export async function statusCmd(options?: StatusOptions): Promise<void> {
     return;
   }
 
-  let merged: MergedConfigResult;
+  let loaded: Awaited<ReturnType<typeof loadAgentStdContext>>;
   try {
-    merged = await loadMergedConfig(root, homeRoot(), options?.projectOnly);
+    loaded = await loadAgentStdContext(root, resolvedHomeRoot, options?.projectOnly);
   } catch (err) {
     if (err instanceof ConfigValidationError) {
       log.error('config invalid');
@@ -43,26 +41,36 @@ export async function statusCmd(options?: StatusOptions): Promise<void> {
     return;
   }
 
-  const { config, sources } = merged;
-  const skillSources = resolveSkillSources(root, config, homeRoot());
+  const { config, sources, scope, hasHomeConfig } = loaded;
+  const skillSources = resolveSkillSources(root, config, resolvedHomeRoot, scope, hasHomeConfig);
   const skills = await listMergedSkills(skillSources);
   const projectSkillCount = skills.filter((skill) => skill.source === 'project').length;
   const homeSkillCount = skills.filter((skill) => skill.source === 'home').length;
 
-  log.info(pc.bold('Project'));
+  log.info(pc.bold(scope === 'global' ? 'Global' : 'Project'));
   log.success('.agentstd.yaml found');
   log.success('config valid');
-  log.dim(`mode: ${config.projectOnly ? 'project-only' : 'merged home + project'}`);
+  const mode =
+    scope === 'global'
+      ? 'global home sync'
+      : config.projectOnly || !hasHomeConfig
+        ? 'project-only'
+        : 'merged home + project';
+  log.dim(`mode: ${mode}`);
   log.dim(`targets: ${config.targets.join(', ')}`);
 
   log.info(`\n${pc.bold('Sources')}`);
-  log.dim(`project: ${path.relative(root, sources[sources.length - 1]) || '.agentstd.yaml'}`);
-  if (!config.projectOnly) {
-    const homeSource = sources.find((source) => source.startsWith(homeRoot()));
+  if (scope === 'global') {
+    log.dim(`home: ${sources[0].replace(resolvedHomeRoot, '~')}`);
+  } else {
+    log.dim(`project: ${path.relative(root, sources[sources.length - 1]) || '.agentstd.yaml'}`);
+  }
+  if (!config.projectOnly && scope !== 'global') {
+    const homeSource = sources.find((source) => source.startsWith(resolvedHomeRoot));
     if (homeSource) {
-      log.dim(`home: ${homeSource.replace(homeRoot(), '~')}`);
+      log.dim(`home: ${homeSource.replace(resolvedHomeRoot, '~')}`);
     } else {
-      log.dim('home: not found');
+      log.dim('home: not found (project-only mode will apply automatically)');
     }
   }
 

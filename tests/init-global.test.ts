@@ -30,11 +30,14 @@ describe('init --global', () => {
     await fs.remove(tmpBase);
   });
 
-  it('writes home .agentstd.yaml, hook, and ensures ~/.agents/skills/', async () => {
+  it('writes home .agentstd.yaml, hook, instructions, and ensures ~/.agents/skills/', async () => {
     await initCmd({ global: true });
 
     expect(await fs.pathExists(path.join(homeDir, '.agentstd.yaml'))).toBe(true);
     expect(await fs.pathExists(path.join(homeDir, '.agentstd', 'hooks', 'pretooluse.js'))).toBe(
+      true,
+    );
+    expect(await fs.pathExists(path.join(homeDir, '.agentstd', 'instructions', 'shared.md'))).toBe(
       true,
     );
     expect(await fs.pathExists(path.join(homeDir, '.agents', 'skills'))).toBe(true);

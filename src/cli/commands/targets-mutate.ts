@@ -21,7 +21,9 @@ export async function targetsAddCmd(
   const configFile = opts.global ? path.join(homeRoot(), '.agentstd.yaml') : configPath(root);
 
   if (!(await fileExists(configFile))) {
-    log.error(`${path.basename(configFile)} not found. Run: agentstd init${opts.global ? ' --global' : ''}`);
+    log.error(
+      `${path.basename(configFile)} not found. Run: agentstd init${opts.global ? ' --global' : ''}`,
+    );
     process.exit(1);
   }
 
@@ -100,7 +102,9 @@ export async function targetsRemoveCmd(
   const bak = await writeConfigWithBackup(configFile, config);
   log.success(`Removed target "${targetId}" from ${path.basename(configFile)}.`);
   if (bak) log.dim(`  backup: ${bak}`);
-  log.dim(`  Run \`agentstd sync\` to apply, or \`agentstd uninstall ${targetId}\` to clean its files.`);
+  log.dim(
+    `  Run \`agentstd sync\` to apply, or \`agentstd uninstall ${targetId}\` to clean its files.`,
+  );
 }
 
 function readCurrentTargets(configFile: string): string[] {
@@ -120,19 +124,19 @@ async function readConfig(
 
 async function promptTarget(options: string[]): Promise<string | undefined> {
   if (!process.stdin.isTTY || !process.stdout.isTTY) {
-    log.error(`No target specified and terminal is non-interactive. Pass a target id: ${options.join(', ')}`);
+    log.error(
+      `No target specified and terminal is non-interactive. Pass a target id: ${options.join(', ')}`,
+    );
     process.exit(1);
   }
-  const { multiselect, isCancel, cancel } = await import('@clack/prompts');
-  const selected = await multiselect({
-    message: 'Select target(s)',
+  const { select, isCancel, cancel } = await import('@clack/prompts');
+  const selected = await select({
+    message: 'Select target',
     options: options.map((t) => ({ value: t, label: t })),
-    required: true,
   });
   if (isCancel(selected)) {
     cancel('Cancelled.');
     process.exit(0);
   }
-  const picked = (selected as string[])[0];
-  return picked;
+  return selected as string;
 }

@@ -4,6 +4,7 @@ import {
   agentsMdPath,
   codexAgentStdRulesPath,
   codexAgentsDir,
+  codexAgentsMdPath,
   codexConfigPath,
   codexHooksPath,
 } from '../../core/paths';
@@ -14,6 +15,10 @@ import { hasCodexInstructionsSynced } from './instructions';
 export async function doctor(ctx: DoctorContext): Promise<DoctorResult> {
   const checks: DoctorCheck[] = [];
   const config = ctx.config;
+  const outputRoot = ctx.outputRoot ?? ctx.projectRoot;
+  const scope = ctx.scope ?? 'project';
+  const instructionsPath =
+    scope === 'global' ? codexAgentsMdPath(outputRoot) : agentsMdPath(outputRoot);
 
   checks.push({
     label: 'Codex native skills directory',
@@ -34,16 +39,23 @@ export async function doctor(ctx: DoctorContext): Promise<DoctorResult> {
   }
 
   if (config.instructions.shared) {
-    const synced = await hasCodexInstructionsSynced(ctx.projectRoot, config);
+    const synced = await hasCodexInstructionsSynced(
+      ctx.projectRoot,
+      outputRoot,
+      config,
+      scope,
+      ctx.homeRoot,
+      ctx.pathSources,
+    );
     checks.push({
-      label: 'AGENTS.md instructions synced',
+      label: `${path.relative(outputRoot, instructionsPath) || instructionsPath} instructions synced`,
       status: synced ? 'pass' : 'warn',
-      message: synced ? undefined : `Run: agentstd sync codex (${agentsMdPath(ctx.projectRoot)})`,
+      message: synced ? undefined : `Run: agentstd sync codex (${instructionsPath})`,
     });
   }
 
   if (config.hooks.preToolUse) {
-    const synced = await hasCodexPreToolUseHookSynced(codexHooksPath(ctx.projectRoot), config);
+    const synced = await hasCodexPreToolUseHookSynced(codexHooksPath(outputRoot), config);
     checks.push({
       label: 'PreToolUse hook synced',
       status: synced ? 'pass' : 'warn',
@@ -54,7 +66,7 @@ export async function doctor(ctx: DoctorContext): Promise<DoctorResult> {
   if (Object.keys(config.mcpServers ?? {}).length > 0) {
     checks.push({
       label: '.codex/config.toml found',
-      status: (await fileExists(codexConfigPath(ctx.projectRoot))) ? 'pass' : 'warn',
+      status: (await fileExists(codexConfigPath(outputRoot))) ? 'pass' : 'warn',
       message: 'Run: agentstd sync codex',
     });
   }
@@ -65,7 +77,7 @@ export async function doctor(ctx: DoctorContext): Promise<DoctorResult> {
   if (hasCommandPermissions) {
     checks.push({
       label: 'Codex rules synced',
-      status: (await fileExists(codexAgentStdRulesPath(ctx.projectRoot))) ? 'pass' : 'warn',
+      status: (await fileExists(codexAgentStdRulesPath(outputRoot))) ? 'pass' : 'warn',
       message: 'Run: agentstd sync codex',
     });
   }
@@ -73,8 +85,8 @@ export async function doctor(ctx: DoctorContext): Promise<DoctorResult> {
   if (Object.keys(config.agents ?? {}).length > 0) {
     checks.push({
       label: 'Codex agents directory found',
-      status: (await fileExists(codexAgentsDir(ctx.projectRoot))) ? 'pass' : 'warn',
-      message: `Run: agentstd sync codex (${path.relative(ctx.projectRoot, codexAgentsDir(ctx.projectRoot))})`,
+      status: (await fileExists(codexAgentsDir(outputRoot))) ? 'pass' : 'warn',
+      message: `Run: agentstd sync codex (${path.relative(outputRoot, codexAgentsDir(outputRoot))})`,
     });
   }
 

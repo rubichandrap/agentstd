@@ -10,10 +10,11 @@ import { hasPreToolUseHookSynced } from './settings';
 export async function doctor(ctx: DoctorContext): Promise<DoctorResult> {
   const checks: DoctorCheck[] = [];
   const root = ctx.projectRoot;
+  const outputRoot = ctx.outputRoot ?? root;
   const config = ctx.config;
 
   // .claude directory
-  const claudeDirExists = await fileExists(claudeDir(root));
+  const claudeDirExists = await fileExists(claudeDir(outputRoot));
   checks.push({
     label: '.claude directory found',
     status: claudeDirExists ? 'pass' : 'fail',
@@ -21,7 +22,7 @@ export async function doctor(ctx: DoctorContext): Promise<DoctorResult> {
   });
 
   // .claude/settings.json
-  const settingsExists = await fileExists(claudeSettingsPath(root));
+  const settingsExists = await fileExists(claudeSettingsPath(outputRoot));
   checks.push({
     label: '.claude/settings.json found',
     status: settingsExists ? 'pass' : 'warn',
@@ -30,7 +31,7 @@ export async function doctor(ctx: DoctorContext): Promise<DoctorResult> {
 
   // PreToolUse hook synced
   if (config.hooks.preToolUse) {
-    const synced = await hasPreToolUseHookSynced(claudeSettingsPath(root), config);
+    const synced = await hasPreToolUseHookSynced(claudeSettingsPath(outputRoot), config);
     checks.push({
       label: 'PreToolUse hook synced',
       status: synced ? 'pass' : 'warn',
@@ -38,8 +39,14 @@ export async function doctor(ctx: DoctorContext): Promise<DoctorResult> {
     });
   }
 
-  const destExists = await fileExists(claudeSkillsDir(root));
-  const sources = resolveSkillSources(root, config, ctx.homeRoot ?? homeRoot());
+  const destExists = await fileExists(claudeSkillsDir(outputRoot));
+  const sources = resolveSkillSources(
+    root,
+    config,
+    ctx.homeRoot ?? homeRoot(),
+    ctx.scope ?? 'project',
+    ctx.hasHomeConfig ?? true,
+  );
   const skills = await listMergedSkills(sources);
 
   // Check for invalid skill folders (missing SKILL.md)
@@ -68,7 +75,7 @@ export async function doctor(ctx: DoctorContext): Promise<DoctorResult> {
     let synced = true;
     for (const skill of skills) {
       const sourcePath = path.join(skill.dir, skill.dirName, 'SKILL.md');
-      const destPath = path.join(claudeSkillsDir(root), skill.dirName, 'SKILL.md');
+      const destPath = path.join(claudeSkillsDir(outputRoot), skill.dirName, 'SKILL.md');
       const sourceContent = await fs.readFile(sourcePath, 'utf8').catch(() => null);
       const destContent = await fs.readFile(destPath, 'utf8').catch(() => null);
       if (sourceContent !== destContent) {

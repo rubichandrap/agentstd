@@ -1,8 +1,8 @@
 import os from 'node:os';
 import path from 'node:path';
 import fs from 'fs-extra';
-import YAML from 'yaml';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import YAML from 'yaml';
 import { claudeAdapter } from '../src/adapters/claude';
 import { codexAdapter } from '../src/adapters/codex';
 import { uninstallCmd } from '../src/cli/commands/uninstall';
@@ -33,7 +33,10 @@ describe('uninstall command', () => {
     await fs.remove(tmpBase);
   });
 
-  async function seedProjectConfig(targets: string[]): Promise<void> {
+  async function seedProjectConfig(
+    targets: string[],
+    overrides: Record<string, unknown> = {},
+  ): Promise<void> {
     const config = {
       version: 1,
       projectOnly: true,
@@ -47,16 +50,14 @@ describe('uninstall command', () => {
         files: { denyRead: [], denyWrite: [] },
       },
       agents: {},
+      ...overrides,
     };
     await fs.writeFile(path.join(projectDir, '.agentstd.yaml'), YAML.stringify(config));
     await fs.outputFile(
       path.join(projectDir, '.agentstd', 'instructions', 'shared.md'),
       '# Shared\n',
     );
-    await fs.outputFile(
-      path.join(projectDir, '.agentstd', 'hooks', 'pretooluse.js'),
-      '# hook',
-    );
+    await fs.outputFile(path.join(projectDir, '.agentstd', 'hooks', 'pretooluse.js'), '# hook');
     await fs.outputFile(
       path.join(projectDir, '.agents', 'skills', 'example-skill', 'SKILL.md'),
       '---\nname: example-skill\ndescription: ex\n---\n\nbody',
@@ -132,6 +133,35 @@ describe('uninstall command', () => {
     expect(await fs.pathExists(path.join(projectDir, '.agents', 'skills'))).toBe(false);
   });
 
+  it('--purge-skills in project scope leaves the home skills directory intact', async () => {
+    await fs.writeFile(
+      path.join(homeDir, '.agentstd.yaml'),
+      YAML.stringify({
+        version: 1,
+        projectOnly: false,
+        targets: ['claude'],
+        skills: { dir: '.agents/skills', homeDir: '.home-skills' },
+      }),
+    );
+    await fs.outputFile(
+      path.join(homeDir, '.home-skills', 'home-skill', 'SKILL.md'),
+      '---\nname: home-skill\ndescription: home\n---\n\nhome',
+    );
+    await seedProjectConfig(['claude'], {
+      projectOnly: false,
+      skills: { dir: '.project-skills', homeDir: '.home-skills' },
+    });
+    await fs.outputFile(
+      path.join(projectDir, '.project-skills', 'project-skill', 'SKILL.md'),
+      '---\nname: project-skill\ndescription: project\n---\n\nproject',
+    );
+
+    await uninstallCmd(undefined, { all: true, purgeSkills: true });
+
+    expect(await fs.pathExists(path.join(projectDir, '.project-skills'))).toBe(false);
+    expect(await fs.pathExists(path.join(homeDir, '.home-skills'))).toBe(true);
+  });
+
   it('--dry-run removes nothing', async () => {
     await seedProjectConfig(['claude']);
     const ctx = {
@@ -191,7 +221,41 @@ describe('uninstall command', () => {
     // Claude gone, codex untouched.
     expect(await fs.pathExists(path.join(projectDir, '.claude', 'settings.json'))).toBe(false);
     expect(await fs.pathExists(path.join(projectDir, '.codex', 'hooks.json'))).toBe(true);
-    // Config + .agentstd/ removed regardless (uninstall purges them).
+    // Config + .agentstd/ kept when other targets remain — so the next
+    // uninstall/sync for codex still has a valid config to load.
+    expect(await fs.pathExists(path.join(projectDir, '.agentstd.yaml'))).toBe(true);
+    expect(await fs.pathExists(path.join(projectDir, '.agentstd'))).toBe(true);
+    expect(await fs.pathExists(path.join(projectDir, '.agentstd.yaml.bak'))).toBe(false);
+  });
+
+  it('uninstalls the last configured target and purges config', async () => {
+    await seedProjectConfig(['claude']);
+    const ctx = {
+      projectRoot: projectDir,
+      homeRoot: homeDir,
+      dryRun: false,
+      config: {
+        version: 1,
+        projectOnly: true,
+        targets: ['claude'],
+        hooks: { preToolUse: { command: 'node .agentstd/hooks/pretooluse.js' } },
+        skills: { dir: '.agents/skills', homeDir: '.agents/skills' },
+        instructions: { shared: '.agentstd/instructions/shared.md' },
+        mcpServers: {},
+        permissions: {
+          commands: { allow: [], prompt: [], deny: [] },
+          files: { denyRead: [], denyWrite: [] },
+        },
+        agents: {},
+      },
+    };
+    await claudeAdapter.sync(ctx);
+
+    await uninstallCmd('claude', {});
+
+    expect(await fs.pathExists(path.join(projectDir, '.claude', 'settings.json'))).toBe(false);
     expect(await fs.pathExists(path.join(projectDir, '.agentstd.yaml'))).toBe(false);
+    expect(await fs.pathExists(path.join(projectDir, '.agentstd'))).toBe(false);
+    expect(await fs.pathExists(path.join(projectDir, '.agentstd.yaml.bak'))).toBe(true);
   });
 });
