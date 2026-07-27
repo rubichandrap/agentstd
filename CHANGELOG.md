@@ -51,7 +51,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `.agentstd.yaml` Zod-validated config with hooks, skills, and instructions fields.
 - Safe sync dry-run (`--dry-run`) and check (`--check`) modes for previewing and CI/CD verification.
 
-[0.4.0]: https://www.npmjs.com/package/agentstd/v/0.4.0
-[0.3.0]: https://www.npmjs.com/package/agentstd/v/0.3.0
-[0.2.0]: https://www.npmjs.com/package/agentstd/v/0.2.0
-[0.1.0]: https://www.npmjs.com/package/agentstd/v/0.1.0
+[0.4.0]: https://github.com/rubichandrap/agentstd/compare/v0.3.0...v0.4.0
+[0.3.0]: https://github.com/rubichandrap/agentstd/compare/v0.2.0...v0.3.0
+[0.2.0]: https://github.com/rubichandrap/agentstd/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/rubichandrap/agentstd/releases/tag/v0.1.0
