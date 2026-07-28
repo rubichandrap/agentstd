@@ -82,6 +82,18 @@ export async function doctor(ctx: DoctorContext): Promise<DoctorResult> {
     });
   }
 
+  const hasFilePermissions =
+    (config.permissions?.files?.denyRead?.length ?? 0) > 0 ||
+    (config.permissions?.files?.denyWrite?.length ?? 0) > 0;
+  if (hasFilePermissions) {
+    checks.push({
+      label: 'Codex file permissions support',
+      status: 'warn',
+      message:
+        'Codex rules do not support file permissions (denyRead/denyWrite); file restrictions are skipped for codex target.',
+    });
+  }
+
   if (Object.keys(config.agents ?? {}).length > 0) {
     checks.push({
       label: 'Codex agents directory found',

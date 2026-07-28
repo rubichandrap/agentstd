@@ -96,7 +96,34 @@ describe('loadMergedConfig', () => {
     });
     const { config } = await loadMergedConfig(projectDir, homeDir);
     expect(config.skills.dir).toBe('.agents/skills');
-    expect(config.skills.homeDir).toBe('.agents/skills');
+    expect(config.skills.homeDir).toBe('.agentstd/skills');
+  });
+
+  describe('skills.homeDir layer isolation', () => {
+    it('project skills.homeDir cannot override home skills.homeDir', async () => {
+      await writeHomeConfig({
+        version: 1,
+        skills: { dir: '.agentstd/skills', homeDir: 'custom/home/skills' },
+      });
+      await writeProjectConfig({
+        version: 1,
+        skills: { dir: '.agents/skills', homeDir: 'project/override/home/skills' },
+      });
+      const { config } = await loadMergedConfig(projectDir, homeDir);
+      expect(config.skills.dir).toBe('.agents/skills');
+      expect(config.skills.homeDir).toBe('custom/home/skills');
+    });
+
+    it('project skills.homeDir is ignored when home config has no skills section', async () => {
+      await writeHomeConfig({ version: 1 });
+      await writeProjectConfig({
+        version: 1,
+        skills: { dir: 'project/skills', homeDir: 'project/override/home/skills' },
+      });
+      const { config } = await loadMergedConfig(projectDir, homeDir);
+      expect(config.skills.dir).toBe('project/skills');
+      expect(config.skills.homeDir).toBe('.agents/skills');
+    });
   });
 
   describe('projectOnly', () => {

@@ -23,6 +23,15 @@ export async function sync(ctx: SyncContext): Promise<SyncResult> {
     );
   }
 
+  const hasFilePermissions =
+    (ctx.config.permissions?.files?.denyRead?.length ?? 0) > 0 ||
+    (ctx.config.permissions?.files?.denyWrite?.length ?? 0) > 0;
+  if (hasFilePermissions) {
+    warnings.push(
+      'Codex rules do not support file permissions (denyRead/denyWrite); file restrictions are skipped for codex target.',
+    );
+  }
+
   const instructions = await syncCodexInstructions(
     ctx.projectRoot,
     outputRoot,

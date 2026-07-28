@@ -122,4 +122,48 @@ describe('Codex adapter', () => {
       'Codex reads .agents/skills natively; custom skills.dir ".agentstd/skills" is not synced for Codex.',
     );
   });
+
+  it('warns during sync when file permissions denyRead or denyWrite is non-empty', async () => {
+    const ctx = makeCtx();
+    ctx.config.permissions = {
+      commands: { allow: [], prompt: [], deny: [] },
+      files: { denyRead: ['.env'], denyWrite: [] },
+    };
+
+    const result = await codexAdapter.sync(ctx);
+
+    expect(result.warnings).toContain(
+      'Codex rules do not support file permissions (denyRead/denyWrite); file restrictions are skipped for codex target.',
+    );
+  });
+
+  describe('doctor file permissions warning', () => {
+    it('warns when permissions.files denyRead or denyWrite is non-empty', async () => {
+      const ctx = makeCtx();
+      ctx.config.permissions = {
+        commands: { allow: [], prompt: [], deny: [] },
+        files: { denyRead: ['.env'], denyWrite: [] },
+      };
+
+      const result = await codexAdapter.doctor(ctx);
+
+      const fileCheck = result.checks.find((c) => c.label === 'Codex file permissions support');
+      expect(fileCheck).toBeDefined();
+      expect(fileCheck?.status).toBe('warn');
+      expect(fileCheck?.message).toContain('Codex rules do not support file permissions');
+    });
+
+    it('passes without file permissions warning when permissions.files is empty', async () => {
+      const ctx = makeCtx();
+      ctx.config.permissions = {
+        commands: { allow: [], prompt: [], deny: [] },
+        files: { denyRead: [], denyWrite: [] },
+      };
+
+      const result = await codexAdapter.doctor(ctx);
+
+      const fileCheck = result.checks.find((c) => c.label === 'Codex file permissions support');
+      expect(fileCheck).toBeUndefined();
+    });
+  });
 });

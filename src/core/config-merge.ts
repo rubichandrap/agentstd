@@ -110,6 +110,14 @@ function deepMerge(
       // A project-defined agent id wins entirely (description, tools,
       // instructions all come from project). Home-only ids are preserved.
       out[key] = { ...homeValue, ...projectValue };
+    } else if (key === 'skills' && isPlainObject(projectValue)) {
+      // project skills.dir wins over home skills.dir, but skills.homeDir is strictly home-layer owned.
+      const homeSkills = isPlainObject(homeValue) ? homeValue : {};
+      const { homeDir: _projectHomeDir, ...cleanProjectSkills } = projectValue as Record<
+        string,
+        unknown
+      >;
+      out[key] = { ...homeSkills, ...cleanProjectSkills };
     } else if (isPlainObject(homeValue) && isPlainObject(projectValue)) {
       out[key] = deepMerge(homeValue, projectValue);
     } else {
@@ -117,6 +125,12 @@ function deepMerge(
     }
   }
   return out;
+}
+
+function prepareProjectConfig(projectObj: Record<string, unknown>): Record<string, unknown> {
+  if (!isPlainObject(projectObj.skills)) return projectObj;
+  const { homeDir: _homeDir, ...cleanSkills } = projectObj.skills as Record<string, unknown>;
+  return { ...projectObj, skills: cleanSkills };
 }
 
 async function readYamlObject(
@@ -146,7 +160,6 @@ export async function loadMergedConfig(
   }
 
   const projectRead = await readYamlObject(projectPath);
-
   const rawProjectOnly = isPlainObject(projectRead.object)
     ? projectRead.object.projectOnly
     : undefined;
@@ -154,7 +167,8 @@ export async function loadMergedConfig(
     flagProjectOnly !== undefined ? flagProjectOnly : rawProjectOnly === true;
 
   if (effectiveProjectOnly) {
-    const validation = agentStdConfigSchema.safeParse(projectRead.object);
+    const cleanProject = prepareProjectConfig(projectRead.object);
+    const validation = agentStdConfigSchema.safeParse(cleanProject);
     if (!validation.success) {
       throw new ConfigValidationError(projectPath, validation.error.issues);
     }
@@ -171,7 +185,8 @@ export async function loadMergedConfig(
   sources.push(projectPath);
 
   if (!homeRead.found) {
-    const validation = agentStdConfigSchema.safeParse(projectRead.object);
+    const cleanProject = prepareProjectConfig(projectRead.object);
+    const validation = agentStdConfigSchema.safeParse(cleanProject);
     if (!validation.success) {
       throw new ConfigValidationError(projectPath, validation.error.issues);
     }
