@@ -33,3 +33,4 @@ graphify-out
 
 # Dev scratch
 .scratch
+!.scratch/.gitkeep
