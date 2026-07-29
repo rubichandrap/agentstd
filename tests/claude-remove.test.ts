@@ -3,6 +3,7 @@ import path from 'node:path';
 import fs from 'fs-extra';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { claudeAdapter } from '../src/adapters/claude';
+import { agentStdConfigSchema } from '../src/core/config';
 import type { RemoveContext, SyncContext } from '../src/core/types';
 
 describe('Claude adapter remove', () => {
@@ -21,7 +22,7 @@ describe('Claude adapter remove', () => {
       projectRoot: tmpDir,
       homeRoot: path.join(tmpDir, 'home'),
       dryRun: false,
-      config: {
+      config: agentStdConfigSchema.parse({
         version: 1,
         targets: ['claude'],
         hooks: {
@@ -45,7 +46,7 @@ describe('Claude adapter remove', () => {
             tools: ['Read'],
           },
         },
-      },
+      }),
     };
   }
 

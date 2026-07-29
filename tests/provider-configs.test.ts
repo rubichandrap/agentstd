@@ -4,6 +4,7 @@ import fs from 'fs-extra';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { sync as claudeSync } from '../src/adapters/claude/sync';
 import { codexAdapter } from '../src/adapters/codex';
+import { agentStdConfigSchema } from '../src/core/config';
 import type { SyncContext } from '../src/core/types';
 
 describe('provider umbrella config compilers', () => {
@@ -21,7 +22,7 @@ describe('provider umbrella config compilers', () => {
     return {
       projectRoot: tmpDir,
       homeRoot: path.join(tmpDir, 'home'),
-      config: {
+      config: agentStdConfigSchema.parse({
         version: 1,
         targets: [target],
         hooks: {},
@@ -53,7 +54,7 @@ describe('provider umbrella config compilers', () => {
             tools: ['read', 'bash'],
           },
         },
-      },
+      }),
     };
   }
 
@@ -121,9 +122,11 @@ describe('provider umbrella config compilers', () => {
     expect(after).toBe(before);
     expect(afterStat.mtimeMs).toBe(beforeStat.mtimeMs);
     expect(result.changed).not.toContain('.mcp.json');
-    expect(result.operations.every((op) => op.type === 'skip' || op.path !== '.mcp.json')).toBe(
-      true,
-    );
+    expect(
+      result.operations.every(
+        (op) => op.type === 'skip' || ('path' in op && op.path !== '.mcp.json'),
+      ),
+    ).toBe(true);
   });
 
   it('MCP sync --check exits 0 on a clean sync (bug 3 regression)', async () => {

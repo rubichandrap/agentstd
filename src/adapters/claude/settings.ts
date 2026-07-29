@@ -1,7 +1,7 @@
 import fs from 'fs-extra';
 import type { AgentStdConfig } from '../../core/config';
 import { fileExists, writeJson } from '../../core/fs';
-import { compileClaudePermissions } from '../../core/provider-config';
+import { compileClaudePermissions } from './permissions';
 
 const AGENTSTD_HOOK_ID = 'agentstd-pretooluse';
 export const DEFAULT_PROJECT_HOOK_COMMAND = 'node .agentstd/hooks/pretooluse.js';

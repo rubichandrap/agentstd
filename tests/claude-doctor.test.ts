@@ -4,6 +4,7 @@ import fs from 'fs-extra';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { doctor } from '../src/adapters/claude/doctor';
 import { sync as claudeSync } from '../src/adapters/claude/sync';
+import { agentStdConfigSchema } from '../src/core/config';
 import type { DoctorContext, SyncContext } from '../src/core/types';
 
 describe('Claude doctor', () => {
@@ -23,13 +24,13 @@ describe('Claude doctor', () => {
     return {
       projectRoot: tmpDir,
       homeRoot: homeDir,
-      config: {
+      config: agentStdConfigSchema.parse({
         version: 1,
         targets: ['claude'],
         hooks: {},
         skills: { dir: '.agents/skills', homeDir: '.agents/skills' },
         instructions: {},
-      },
+      }),
     };
   }
 

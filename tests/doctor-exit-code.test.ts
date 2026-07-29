@@ -1,8 +1,8 @@
+import fs from 'fs-extra';
 import os from 'node:os';
 import path from 'node:path';
-import fs from 'fs-extra';
-import YAML from 'yaml';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import YAML from 'yaml';
 import { doctorCmd } from '../src/cli/commands/doctor';
 
 describe('doctor/check exit code', () => {

@@ -7,6 +7,7 @@ import {
   readSettings,
   upsertPreToolUseHook,
 } from '../src/adapters/claude/settings';
+import { agentStdConfigSchema } from '../src/core/config';
 
 describe('Claude settings', () => {
   let tmpDir: string;
@@ -21,8 +22,8 @@ describe('Claude settings', () => {
     await fs.remove(tmpDir);
   });
 
-  const config = {
-    version: 1 as const,
+  const config = agentStdConfigSchema.parse({
+    version: 1,
     targets: ['claude'],
     hooks: {
       preToolUse: {
@@ -31,7 +32,7 @@ describe('Claude settings', () => {
     },
     skills: { dir: '.agentstd/skills', homeDir: '.agents/skills' },
     instructions: {},
-  };
+  });
 
   it('creates settings.json with AgentStd hook when file does not exist', async () => {
     await upsertPreToolUseHook(settingsPath, config);
@@ -252,7 +253,7 @@ describe('Claude settings', () => {
     const permConfig = {
       ...config,
       permissions: {
-        commands: { allow: [['pnpm', 'test']] },
+        commands: { allow: [['pnpm', 'test']], prompt: [], deny: [] },
         files: { denyRead: [], denyWrite: [] },
       },
     };
@@ -273,7 +274,7 @@ describe('Claude settings', () => {
     const permConfig = {
       ...config,
       permissions: {
-        commands: { allow: [], deny: [['rm', '-rf']] },
+        commands: { allow: [], prompt: [], deny: [['rm', '-rf']] },
         files: { denyRead: [], denyWrite: [] },
       },
     };
@@ -288,7 +289,7 @@ describe('Claude settings', () => {
     const permConfig = {
       ...config,
       permissions: {
-        commands: { allow: [['pnpm', 'test']] },
+        commands: { allow: [['pnpm', 'test']], prompt: [], deny: [] },
         files: { denyRead: [], denyWrite: [] },
       },
     };

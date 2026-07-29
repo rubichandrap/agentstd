@@ -1,8 +1,8 @@
 import path from 'node:path';
 import { permissionsOf } from '../../core/config-defaults';
-import { ensureDir, fileExists } from '../../core/fs';
-import { claudeSkillsDir } from '../../core/paths';
-import { syncClaudeAgents, syncClaudeMcpServers } from '../../core/provider-config';
+import { fileExists } from '../../core/fs';
+import { syncClaudeAgents } from './agents';
+import { syncClaudeMcpServers } from './mcp';
 import type { FileOperation, SyncContext, SyncResult } from '../../core/types';
 import { needsSettingsUpdate, upsertClaudeSettings } from './settings';
 import { syncClaudeSkills } from './skills';
