@@ -1,0 +1,10 @@
+[mcp_servers.graphify]
+command = "uvx"
+args = [
+  "--from",
+  "graphifyy[mcp]",
+  "python",
+  "-m",
+  "graphify.serve",
+  "graphify-out/graph.json"
+]

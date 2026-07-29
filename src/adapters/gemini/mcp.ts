@@ -3,29 +3,29 @@ import fs from 'fs-extra';
 import type { AgentStdConfig } from '../../core/config';
 import { mcpServersOf } from '../../core/config-defaults';
 import { ensureGitKeep, fileExists, readJsonIfExists, writeJson } from '../../core/fs';
-import { mcpConfigPath } from '../../core/paths';
+import { geminiSettingsPath } from '../../core/paths';
 import type { FileOperation } from '../../core/types';
 
 const AGENTSTD_MCP_SERVER_PREFIX = 'agentstd:';
 
-interface MpcJson {
+interface GeminiSettings {
   mcpServers?: Record<string, unknown>;
   [key: string]: unknown;
 }
 
-export async function syncClaudeMcpServers(
+export async function syncGeminiMcpServers(
   outputRoot: string,
   config: AgentStdConfig,
   operations: FileOperation[],
   dryRun?: boolean,
 ): Promise<string[]> {
   const serverEntries = Object.entries(mcpServersOf(config));
-  const filePath = mcpConfigPath(outputRoot);
+  const filePath = geminiSettingsPath(outputRoot);
   const exists = await fileExists(filePath);
   if (!exists && serverEntries.length === 0) return [];
 
   // Read before pushing the op so --check sees no drift on a clean sync.
-  const current = exists ? ((await readJsonIfExists<MpcJson>(filePath)) ?? {}) : {};
+  const current = exists ? ((await readJsonIfExists<GeminiSettings>(filePath)) ?? {}) : {};
   const currentServers = current.mcpServers ?? {};
   const nextServers: Record<string, unknown> = {};
 
@@ -47,32 +47,32 @@ export async function syncClaudeMcpServers(
   if (mcpServersEqual(currentServers, nextServers)) {
     operations.push({
       type: 'skip',
-      description: '.mcp.json',
+      description: '.gemini/settings.json',
       reason: 'MCP servers already synced',
     });
     return [];
   }
 
-  const nextMcpJson = buildNextMcpJson(current, nextServers);
+  const nextSettings = buildNextSettings(current, nextServers);
   operations.push({
-    type: nextMcpJson.removeFile ? 'remove-file' : exists ? 'update-file' : 'create-file',
+    type: nextSettings.removeFile ? 'remove-file' : exists ? 'update-file' : 'create-file',
     path: path.relative(outputRoot, filePath) || filePath,
   });
 
-  if (dryRun) return ['.mcp.json'];
+  if (dryRun) return ['.gemini/settings.json'];
 
-  if (nextMcpJson.removeFile) await fs.remove(filePath);
+  if (nextSettings.removeFile) await fs.remove(filePath);
   else {
-    await writeJson(filePath, nextMcpJson.data);
-    await ensureGitKeep(path.dirname(filePath));
+    await writeJson(filePath, nextSettings.data);
+    await ensureGitKeep(path.dirname(filePath), dryRun);
   }
-  return ['.mcp.json'];
+  return ['.gemini/settings.json'];
 }
 
-function buildNextMcpJson(
-  current: MpcJson,
+function buildNextSettings(
+  current: GeminiSettings,
   nextServers: Record<string, unknown>,
-): { data: MpcJson; removeFile: false } | { removeFile: true } {
+): { data: GeminiSettings; removeFile: false } | { removeFile: true } {
   if (Object.keys(nextServers).length > 0) {
     return { data: { ...current, mcpServers: nextServers }, removeFile: false };
   }

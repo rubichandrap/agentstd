@@ -1,10 +1,35 @@
+# Common
+!**/.gitkeep
+
+# Dependencies
 node_modules
+
+# Build output
 dist
+
+# Environment
 .env
 *.log
-.commandcode
-.scratch
+
+# AI agent artifacts (auto-generated; managed by agentstd)
 .agents
-.claude
-.codex
+.claude/*
+!.claude/settings.json
+!.claude/.gitkeep
+.codex/*
+!.codex/config.toml
+!.codex/.gitkeep
+.commandcode/*
+!.commandcode/mcp.json
+!.commandcode/.gitkeep
+.gemini/*
+!.gemini/settings.json
+!.gemini/.gitkeep
+.opencode/*
+!.opencode/mcp.json
+!.opencode/.gitkeep
 skills-lock.json
+graphify-out
+
+# Dev scratch
+.scratch

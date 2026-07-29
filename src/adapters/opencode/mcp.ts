@@ -3,7 +3,7 @@ import fs from 'fs-extra';
 import type { AgentStdConfig } from '../../core/config';
 import { mcpServersOf } from '../../core/config-defaults';
 import { ensureGitKeep, fileExists, readJsonIfExists, writeJson } from '../../core/fs';
-import { mcpConfigPath } from '../../core/paths';
+import { openCodeMcpPath } from '../../core/paths';
 import type { FileOperation } from '../../core/types';
 
 const AGENTSTD_MCP_SERVER_PREFIX = 'agentstd:';
@@ -13,14 +13,14 @@ interface MpcJson {
   [key: string]: unknown;
 }
 
-export async function syncClaudeMcpServers(
+export async function syncOpenCodeMcpServers(
   outputRoot: string,
   config: AgentStdConfig,
   operations: FileOperation[],
   dryRun?: boolean,
 ): Promise<string[]> {
   const serverEntries = Object.entries(mcpServersOf(config));
-  const filePath = mcpConfigPath(outputRoot);
+  const filePath = openCodeMcpPath(outputRoot);
   const exists = await fileExists(filePath);
   if (!exists && serverEntries.length === 0) return [];
 
@@ -47,7 +47,7 @@ export async function syncClaudeMcpServers(
   if (mcpServersEqual(currentServers, nextServers)) {
     operations.push({
       type: 'skip',
-      description: '.mcp.json',
+      description: '.opencode/mcp.json',
       reason: 'MCP servers already synced',
     });
     return [];
@@ -59,14 +59,14 @@ export async function syncClaudeMcpServers(
     path: path.relative(outputRoot, filePath) || filePath,
   });
 
-  if (dryRun) return ['.mcp.json'];
+  if (dryRun) return ['.opencode/mcp.json'];
 
   if (nextMcpJson.removeFile) await fs.remove(filePath);
   else {
     await writeJson(filePath, nextMcpJson.data);
-    await ensureGitKeep(path.dirname(filePath));
+    await ensureGitKeep(path.dirname(filePath), dryRun);
   }
-  return ['.mcp.json'];
+  return ['.opencode/mcp.json'];
 }
 
 function buildNextMcpJson(

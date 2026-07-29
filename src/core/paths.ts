@@ -100,3 +100,33 @@ export function agentsMdPath(root: string): string {
 export function codexAgentsMdPath(root: string): string {
   return path.join(codexDir(root), 'AGENTS.md');
 }
+
+// Gemini CLI
+
+export function geminiDir(root: string): string {
+  return path.join(root, '.gemini');
+}
+
+export function geminiSettingsPath(root: string): string {
+  return path.join(geminiDir(root), 'settings.json');
+}
+
+// CommandCode
+
+export function commandCodeDir(root: string): string {
+  return path.join(root, '.commandcode');
+}
+
+export function commandCodeMcpPath(root: string): string {
+  return path.join(commandCodeDir(root), 'mcp.json');
+}
+
+// OpenCode
+
+export function openCodeDir(root: string): string {
+  return path.join(root, '.opencode');
+}
+
+export function openCodeMcpPath(root: string): string {
+  return path.join(openCodeDir(root), 'mcp.json');
+}
