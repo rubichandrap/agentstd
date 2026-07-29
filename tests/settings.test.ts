@@ -104,7 +104,7 @@ describe('Claude settings', () => {
     const noHookConfig = { ...config, hooks: {} };
     await upsertPreToolUseHook(settingsPath, noHookConfig);
     const settings = await readSettings(settingsPath);
-    expect(settings.hooks?.PreToolUse).toHaveLength(0);
+    expect(settings.hooks?.PreToolUse).toBeUndefined();
   });
 
   it('preserves unknown top-level fields', async () => {
@@ -233,9 +233,7 @@ describe('Claude settings', () => {
     await upsertPreToolUseHook(settingsPath, updated);
     const settings = await readSettings(settingsPath);
     expect(settings.hooks?.PreToolUse).toHaveLength(1);
-    expect(settings.hooks?.PreToolUse?.[0].hooks[0].command).toBe(
-      '/usr/local/bin/custom-hook-v2',
-    );
+    expect(settings.hooks?.PreToolUse?.[0].hooks[0].command).toBe('/usr/local/bin/custom-hook-v2');
   });
 
   it('preserves _agentstd marker on persisted hooks (for clean uninstall)', async () => {
@@ -253,7 +251,10 @@ describe('Claude settings', () => {
     );
     const permConfig = {
       ...config,
-      permissions: { commands: { allow: [['pnpm', 'test']] }, files: { denyRead: [], denyWrite: [] } },
+      permissions: {
+        commands: { allow: [['pnpm', 'test']] },
+        files: { denyRead: [], denyWrite: [] },
+      },
     };
     await upsertPreToolUseHook(settingsPath, permConfig);
     const settings = await readSettings(settingsPath);
@@ -271,7 +272,10 @@ describe('Claude settings', () => {
     );
     const permConfig = {
       ...config,
-      permissions: { commands: { allow: [], deny: [['rm', '-rf']] }, files: { denyRead: [], denyWrite: [] } },
+      permissions: {
+        commands: { allow: [], deny: [['rm', '-rf']] },
+        files: { denyRead: [], denyWrite: [] },
+      },
     };
     await upsertPreToolUseHook(settingsPath, permConfig);
     const settings = await readSettings(settingsPath);
@@ -283,7 +287,10 @@ describe('Claude settings', () => {
   it('union is idempotent: re-sync does not duplicate entries', async () => {
     const permConfig = {
       ...config,
-      permissions: { commands: { allow: [['pnpm', 'test']] }, files: { denyRead: [], denyWrite: [] } },
+      permissions: {
+        commands: { allow: [['pnpm', 'test']] },
+        files: { denyRead: [], denyWrite: [] },
+      },
     };
     await upsertPreToolUseHook(settingsPath, permConfig);
     await upsertPreToolUseHook(settingsPath, permConfig);

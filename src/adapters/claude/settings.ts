@@ -49,10 +49,7 @@ function claudeHookCommand(command: string): string {
 
 export { claudeHookCommand };
 
-export function isAgentStdHook(
-  hook: ClaudeHook,
-  expectedCommand?: string,
-): boolean {
+export function isAgentStdHook(hook: ClaudeHook, expectedCommand?: string): boolean {
   if (hook._agentstd === AGENTSTD_HOOK_ID) return true;
   if (expectedCommand === undefined) return false;
   const cmd = (hook.hooks?.[0] as ClaudeHookEntry | undefined)?.command ?? '';
@@ -91,20 +88,22 @@ export async function upsertClaudeSettings(
 }
 
 function computeFinalSettings(settings: ClaudeSettings, config: AgentStdConfig): ClaudeSettings {
+  const computedHooks = computeFinalHooks(settings, config);
   const finalSettings: ClaudeSettings = {
     ...settings,
-    hooks: computeFinalHooks(settings, config),
   };
+  if (Object.keys(computedHooks).length > 0) {
+    finalSettings.hooks = computedHooks;
+  } else {
+    delete finalSettings.hooks;
+  }
 
   const agentStdPermissions = compileClaudePermissions(config);
   const userPermissions = subtractPermissions(
     settings.permissions,
     settings._agentstd?.permissions,
   );
-  const merged = mergePermissions(
-    userPermissions,
-    agentStdPermissions,
-  );
+  const merged = mergePermissions(userPermissions, agentStdPermissions);
   if (Object.keys(merged).length > 0) {
     finalSettings.permissions = merged;
   } else {
@@ -192,7 +191,7 @@ function computeFinalHooks(
   const expected = config.hooks.preToolUse
     ? claudeHookCommand(config.hooks.preToolUse.command ?? DEFAULT_PROJECT_HOOK_COMMAND)
     : undefined;
-  const filtered = existingHooks.filter((h) => !isAgentStdHook(h, expected));
+  const filtered = existingHooks.filter((hook) => !isAgentStdHook(hook, expected));
 
   if (config.hooks.preToolUse) {
     filtered.push(buildAgentStdHook(config));
@@ -203,7 +202,9 @@ function computeFinalHooks(
     if (key === 'PreToolUse') continue;
     finalHooks[key] = hooks[key];
   }
-  finalHooks.PreToolUse = filtered;
+  if (filtered.length > 0) {
+    finalHooks.PreToolUse = filtered;
+  }
 
   return finalHooks;
 }

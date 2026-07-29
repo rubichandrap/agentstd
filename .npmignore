@@ -2,6 +2,11 @@ src
 tests
 .github
 .commandcode
+.scratch
+.agents
+.claude
+.codex
+skills-lock.json
 .editorconfig
 .npmrc
 .gitignore

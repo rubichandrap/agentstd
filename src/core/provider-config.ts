@@ -1,5 +1,6 @@
 import path from 'node:path';
 import fs from 'fs-extra';
+import YAML from 'yaml';
 import type { AgentStdConfig } from './config';
 import { agentsOf, mcpServersOf, permissionsOf } from './config-defaults';
 import { type ConfigPathSources, sourceRoot } from './config-merge';
@@ -86,10 +87,7 @@ function buildNextMcpJson(
   return { data: rest, removeFile: false };
 }
 
-function mcpServersEqual(
-  a: Record<string, unknown>,
-  b: Record<string, unknown>,
-): boolean {
+function mcpServersEqual(a: Record<string, unknown>, b: Record<string, unknown>): boolean {
   const aKeys = Object.keys(a);
   const bKeys = Object.keys(b);
   if (aKeys.length !== bKeys.length) return false;
@@ -373,10 +371,13 @@ function isAgentStdAgentFile(content: string): boolean {
 }
 
 function renderClaudeAgent(description: string, tools: string[], body: string): string {
-  const lines = ['---', `description: ${description}`, 'agentstd-managed: true'];
-  if (tools.length > 0) lines.push(`tools: ${tools.join(', ')}`);
-  lines.push('---', '', body.trim(), '');
-  return lines.join('\n');
+  const frontmatterData: Record<string, unknown> = {
+    description,
+    'agentstd-managed': true,
+  };
+  if (tools.length > 0) frontmatterData.tools = tools.join(', ');
+  const frontmatter = YAML.stringify(frontmatterData).trim();
+  return `---\n${frontmatter}\n---\n\n${body.trim()}\n`;
 }
 
 function renderCodexAgent(description: string, instructions: string, tools: string[]): string {

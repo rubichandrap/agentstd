@@ -42,6 +42,26 @@ export async function targetsListCmd(): Promise<void> {
       agents: 'unknown',
       status: 'planned',
     },
+    {
+      id: 'cursor',
+      preToolUse: 'planned',
+      skills: 'planned',
+      instructions: 'planned',
+      mcpServers: 'planned',
+      permissions: 'planned',
+      agents: 'planned',
+      status: 'planned',
+    },
+    {
+      id: 'windsurf',
+      preToolUse: 'planned',
+      skills: 'planned',
+      instructions: 'planned',
+      mcpServers: 'planned',
+      permissions: 'planned',
+      agents: 'planned',
+      status: 'planned',
+    },
   ];
   const targets = [...supported, ...planned];
 

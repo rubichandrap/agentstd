@@ -321,24 +321,40 @@ Umbrella config fields:
 - `permissions.files` — portable read/write file restrictions where supported
 - `agents` — shared subagent definitions compiled to provider-native agent files
 
-## Supported Targets
+## Supported Targets & Feature Matrix
 
-AgentStd currently supports Claude Code and Codex.
+AgentStd currently supports **Claude Code** (`claude`) and **OpenAI Codex CLI** (`codex`).
 
-| Feature       | Claude Code | Codex |
-|---------------|-------------|-------|
-| PreToolUse    | Native      | Native |
-| Skills        | Native copy | Native `.agents/skills` |
-| Instructions  | Partial     | Native `AGENTS.md` |
-| MCP servers   | Native `.mcp.json` | Native `.codex/config.toml` |
-| Permissions   | Partial     | Partial |
-| Agents        | Native `.claude/agents` | Native `.codex/agents` |
+| Feature       | Claude Code (`claude`) | OpenAI Codex CLI (`codex`) |
+|---------------|-------------------------|----------------------------|
+| **PreToolUse Hooks** | Native (`.claude/settings.json`) | Native (`.codex/hooks.json`) |
+| **Skills** | Native copy (`.claude/skills/`) | Native (`.agents/skills/`) |
+| **Instructions** | System prompts / settings | Native (`AGENTS.md` / `~/.codex/AGENTS.md`) |
+| **MCP Servers** | Native (`.mcp.json`) | Native (`.codex/config.toml`) |
+| **Command Permissions** | Native `Bash(...)` rules | Native (`.codex/rules/agentstd.rules`) |
+| **File Permissions** | Native `Read(...)` & `Write(...)` | ⚠️ Unsupported by Codex rules |
+| **Sub-agents** | Native (`.claude/agents/*.md`) | Native (`.codex/agents/*.toml`) |
 
-Claude skills are copied into `.claude/skills/`. Codex reads `.agents/skills/` directly, so custom `skills.dir` values are not copied for Codex. For Codex instructions, project sync writes root `AGENTS.md`; global sync writes `~/.codex/AGENTS.md`.
+### Target-Specific Behavior & Limitations
 
-Claude MCP server ids in `.agentstd.yaml` can stay simple, such as `github`; AgentStd writes them to `.mcp.json` as `agentstd:github` so uninstall can remove only AgentStd-owned provider entries.
+- **Codex CLI (`codex`)**:
+  - **Skills Directory**: Codex natively reads `.agents/skills/`. If `skills.dir` in `.agentstd.yaml` is set to a custom directory (e.g. `my-skills`), AgentStd emits a warning during sync as custom skill directories are not copied for Codex.
+  - **File Restrictions**: Codex `prefix_rule` configuration syntax only supports command pattern rules (`allow`, `prompt`, `forbidden`). File read/write restrictions (`permissions.files.denyRead` / `denyWrite`) are not supported by Codex rules syntax and are skipped during Codex sync.
+  - **Instructions**: Project sync writes managed instruction blocks into root `AGENTS.md`; global sync writes managed blocks into `~/.codex/AGENTS.md`.
+- **Claude Code (`claude`)**:
+  - **Skills Directory**: Skills are synced into `.claude/skills/`.
+  - **MCP Servers**: MCP server identifiers written to `.mcp.json` are prefixed with `agentstd:` (e.g. `agentstd:github`) so `agentstd uninstall` can safely identify and remove only AgentStd-managed entries without touching user-authored servers.
 
-Adapters preserve existing provider-owned settings and only replace AgentStd-managed entries or marked blocks.
+### Unsupported Adapters Notice
+
+The following coding agents and tools are **not yet natively supported** as sync targets:
+- **OpenCode** (`opencode`) — *In Progress / Planned*
+- **Cursor** (`cursor`) — *Planned*
+- **Windsurf** (`windsurf`) — *Planned*
+- **Pi / CommandCode** (`pi`) — *Planned*
+- **Aider** (`aider`) — *Planned*
+
+If you are using these tools, you can still maintain your central rules in `.agentstd.yaml` and `.agents/skills/` while native compilation adapters are being developed.
 
 ## Safety guarantees
 
@@ -355,12 +371,11 @@ AgentStd is designed to be safe and predictable:
 
 ## Roadmap
 
-- OpenCode adapter
-- CommandCode adapter
-- Pi adapter
-- Runtime skill discovery
-- Policy-based hook rules
-- Adapter plugin API
+- [ ] **OpenCode Adapter**: Native sync for OpenCode agent rules and settings
+- [ ] **Cursor / Windsurf Adapters**: Support for IDE-based agent rule injection
+- [ ] **Pi / CommandCode Adapter**: Native sync for Pi agent hooks and rules
+- [ ] **Dynamic Policy Engine**: Policy-based hook rules with declarative rule matching
+- [ ] **Adapter Plugin API**: Third-party adapter plugin registry for custom agent extensions
 
 ## License
 
