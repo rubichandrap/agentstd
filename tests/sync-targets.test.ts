@@ -1,14 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { resolveSyncTargets } from '../src/cli/commands/sync-targets';
+import { agentStdConfigSchema } from '../src/core/config';
 import type { AgentStdConfig } from '../src/core/types';
 
-const config: AgentStdConfig = {
+const config: AgentStdConfig = agentStdConfigSchema.parse({
   version: 1,
   targets: ['claude', 'codex'],
   hooks: {},
   skills: { dir: '.agents/skills', homeDir: '.agents/skills' },
   instructions: {},
-};
+});
 
 describe('resolveSyncTargets', () => {
   it('uses the explicit target without prompting', async () => {

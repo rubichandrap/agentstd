@@ -3,6 +3,7 @@ import path from 'node:path';
 import fs from 'fs-extra';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { syncClaudeSkills } from '../src/adapters/claude/skills';
+import { agentStdConfigSchema } from '../src/core/config';
 import type { SyncContext } from '../src/core/types';
 
 describe('Claude skills sync', () => {
@@ -14,13 +15,13 @@ describe('Claude skills sync', () => {
     ctx = {
       projectRoot: tmpDir,
       homeRoot: path.join(tmpDir, 'home'),
-      config: {
+      config: agentStdConfigSchema.parse({
         version: 1,
         targets: ['claude'],
         hooks: {},
         skills: { dir: '.agentstd/skills', homeDir: '.agents/skills' },
         instructions: {},
-      },
+      }),
       dryRun: false,
     };
     const skillDir = path.join(tmpDir, '.agentstd', 'skills', 'my-skill');

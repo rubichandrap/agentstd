@@ -5,28 +5,32 @@ import fs from 'fs-extra';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { sync as claudeSync } from '../src/adapters/claude/sync';
 import { initCmd } from '../src/cli/commands/init';
+import { agentStdConfigSchema } from '../src/core/config';
 import type { SyncContext } from '../src/core/types';
 
 describe('Sync integration', () => {
   let tmpDir: string;
+  let originalCwd: string;
 
   beforeEach(async () => {
     tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agentstd-test-'));
+    originalCwd = process.cwd();
     process.chdir(tmpDir);
   });
 
   afterEach(async () => {
+    process.chdir(originalCwd);
     await fs.remove(tmpDir);
   });
 
   async function setupInit(): Promise<void> {
-    const originalCwd = process.cwd();
+    const configFile = path.join(tmpDir, '.agentstd.yaml');
+    if (await fs.pathExists(configFile)) {
+      return;
+    }
     process.chdir(tmpDir);
     try {
-      const configFile = path.join(tmpDir, '.agentstd.yaml');
-      if (!(await fs.pathExists(configFile))) {
-        await initCmd();
-      }
+      await initCmd();
     } finally {
       process.chdir(originalCwd);
     }
@@ -36,7 +40,7 @@ describe('Sync integration', () => {
     return {
       projectRoot: tmpDir,
       homeRoot: path.join(tmpDir, 'home'),
-      config: {
+      config: agentStdConfigSchema.parse({
         version: 1,
         targets: ['claude'],
         hooks: {
@@ -46,7 +50,7 @@ describe('Sync integration', () => {
         },
         skills: { dir: '.agents/skills', homeDir: '.agents/skills' },
         instructions: {},
-      },
+      }),
       dryRun,
     };
   }
@@ -172,7 +176,7 @@ function runHook(
       stdio: [inputFd, 'ignore', 'pipe'],
     });
     let stderr = '';
-    child.stderr.on('data', (chunk) => {
+    child.stderr?.on('data', (chunk) => {
       stderr += String(chunk);
     });
     child.on('error', (error) => {

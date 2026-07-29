@@ -4,13 +4,9 @@ import fs from 'fs-extra';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import YAML from 'yaml';
 import { sync as claudeSync } from '../src/adapters/claude/sync';
-import {
-  hasPreToolUseHookSynced,
-  readSettings,
-  upsertClaudeSettings,
-} from '../src/adapters/claude/settings';
+import { readSettings, upsertClaudeSettings } from '../src/adapters/claude/settings';
 import { agentStdConfigSchema } from '../src/core/config';
-import { syncClaudeAgents } from '../src/core/provider-config';
+import { syncClaudeAgents } from '../src/adapters/claude/agents';
 import { resolveSkillSources } from '../src/core/skill-resolve';
 import type { FileOperation, SyncContext } from '../src/core/types';
 
@@ -50,7 +46,7 @@ describe('Regression Bug Fixes', () => {
     // Verify YAML frontmatter parses cleanly
     const match = content.match(/^---\n([\s\S]+?)\n---/);
     expect(match).not.toBeNull();
-    const parsedYaml = YAML.parse(match![1]);
+    const parsedYaml = YAML.parse(match?.[1] ?? '');
     expect(parsedYaml.description).toBe('Code Reviewer: checks pull requests for bugs');
     expect(parsedYaml['agentstd-managed']).toBe(true);
   });
@@ -128,7 +124,7 @@ describe('Regression Bug Fixes', () => {
   });
 
   it('syncClaudeMcpServers serializes MCP servers with agentstd: prefix', async () => {
-    const { syncClaudeMcpServers } = await import('../src/core/provider-config');
+    const { syncClaudeMcpServers } = await import('../src/adapters/claude/mcp');
     const config = agentStdConfigSchema.parse({
       version: 1,
       targets: ['claude'],
@@ -150,7 +146,7 @@ describe('Regression Bug Fixes', () => {
   });
 
   it('syncCodexConfigToml serializes MCP servers into .codex/config.toml managed block', async () => {
-    const { syncCodexConfigToml } = await import('../src/core/provider-config');
+    const { syncCodexConfigToml } = await import('../src/adapters/codex/config');
     const config = agentStdConfigSchema.parse({
       version: 1,
       targets: ['codex'],

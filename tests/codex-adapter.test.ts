@@ -3,6 +3,7 @@ import path from 'node:path';
 import fs from 'fs-extra';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { codexAdapter } from '../src/adapters/codex';
+import { agentStdConfigSchema } from '../src/core/config';
 import type { SyncContext } from '../src/core/types';
 
 describe('Codex adapter', () => {
@@ -21,7 +22,7 @@ describe('Codex adapter', () => {
       projectRoot: tmpDir,
       homeRoot: path.join(tmpDir, 'home'),
       dryRun,
-      config: {
+      config: agentStdConfigSchema.parse({
         version: 1,
         targets: ['codex'],
         hooks: {
@@ -33,7 +34,7 @@ describe('Codex adapter', () => {
         instructions: {
           shared: '.agentstd/instructions/shared.md',
         },
-      },
+      }),
     };
   }
 
@@ -81,7 +82,7 @@ describe('Codex adapter', () => {
 
   it('preserves custom PreToolUse commands', async () => {
     const ctx = makeCtx();
-    ctx.config.hooks.preToolUse.command = 'node ./custom-hook.js';
+    ctx.config.hooks = { preToolUse: { command: 'node ./custom-hook.js' } };
 
     await codexAdapter.sync(ctx);
 

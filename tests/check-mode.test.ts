@@ -4,6 +4,7 @@ import fs from 'fs-extra';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { sync as claudeSync } from '../src/adapters/claude/sync';
 import { initCmd } from '../src/cli/commands/init';
+import { agentStdConfigSchema } from '../src/core/config';
 import type { SyncContext } from '../src/core/types';
 
 describe('Check mode', () => {
@@ -25,7 +26,7 @@ describe('Check mode', () => {
     return {
       projectRoot: tmpDir,
       homeRoot: path.join(tmpDir, 'home'),
-      config: {
+      config: agentStdConfigSchema.parse({
         version: 1,
         targets: ['claude'],
         hooks: {
@@ -35,7 +36,7 @@ describe('Check mode', () => {
         },
         skills: { dir: '.agents/skills', homeDir: '.agents/skills' },
         instructions: {},
-      },
+      }),
       dryRun,
     };
   }

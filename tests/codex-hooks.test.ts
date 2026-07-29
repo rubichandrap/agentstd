@@ -7,16 +7,17 @@ import {
   hasCodexPreToolUseHookSynced,
   upsertCodexPreToolUseHook,
 } from '../src/adapters/codex/hooks';
+import { agentStdConfigSchema } from '../src/core/config';
 import type { AgentStdConfig, RemoveContext, SyncContext } from '../src/core/types';
 
 function baseConfig(command?: string): AgentStdConfig {
-  return {
+  return agentStdConfigSchema.parse({
     version: 1,
     targets: ['codex'],
     hooks: command ? { preToolUse: { command } } : {},
     skills: { dir: '.agents/skills', homeDir: '.agents/skills' },
     instructions: {},
-  };
+  });
 }
 
 describe('Codex hook ownership (bug 1 regression)', () => {
@@ -86,7 +87,7 @@ describe('Codex hook ownership (bug 1 regression)', () => {
     };
     await codexAdapter.remove(removeCtx);
     const hooksAfter = await fs.readJson(hooksPath).catch(() => null);
-    if (hooksAfter && hooksAfter.hooks && hooksAfter.hooks.PreToolUse) {
+    if (hooksAfter?.hooks?.PreToolUse) {
       expect(hooksAfter.hooks.PreToolUse).toHaveLength(0);
     } else {
       expect(hooksAfter?.hooks?.PreToolUse ?? []).toHaveLength(0);

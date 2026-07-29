@@ -8,7 +8,7 @@ import {
   homeRoot,
   mcpConfigPath,
 } from '../../core/paths';
-import { compileClaudePermissions } from '../../core/provider-config';
+import { compileClaudePermissions } from './permissions';
 import { listMergedSkills } from '../../core/skill';
 import { resolveSkillSources } from '../../core/skill-resolve';
 import type { FileOperation, RemoveContext, RemoveResult } from '../../core/types';

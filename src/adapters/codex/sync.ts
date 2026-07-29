@@ -1,7 +1,9 @@
 import path from 'node:path';
 import { fileExists } from '../../core/fs';
 import { codexHooksPath } from '../../core/paths';
-import { syncCodexAgents, syncCodexConfigToml, syncCodexRules } from '../../core/provider-config';
+import { syncCodexAgents } from './agents';
+import { syncCodexConfigToml } from './config';
+import { syncCodexRules } from './rules';
 import type { FileOperation, SyncContext, SyncResult } from '../../core/types';
 import {
   needsCodexHookUpdate,
