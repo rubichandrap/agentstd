@@ -215,8 +215,9 @@ describe('provider umbrella config compilers', () => {
     expect(await fs.pathExists(path.join(tmpDir, '.claude', 'agents', 'code-reviewer.md'))).toBe(
       false,
     );
-    expect(result.operations.some((op) => op.type === 'update-file' && op.path === '.mcp.json'))
-      .toBe(true);
+    expect(
+      result.operations.some((op) => op.type === 'update-file' && op.path === '.mcp.json'),
+    ).toBe(true);
     expect(
       result.operations.some(
         (op) => op.type === 'remove-file' && op.path === '.claude/agents/code-reviewer.md',
@@ -275,9 +276,7 @@ describe('provider umbrella config compilers', () => {
 
     const finalConfig = await fs.readFile(configPath, 'utf8');
     expect(finalConfig).toBe('model = "gpt-5"\n');
-    expect(await fs.pathExists(path.join(tmpDir, '.codex', 'rules', 'agentstd.rules'))).toBe(
-      false,
-    );
+    expect(await fs.pathExists(path.join(tmpDir, '.codex', 'rules', 'agentstd.rules'))).toBe(false);
     expect(await fs.pathExists(path.join(tmpDir, '.codex', 'agents', 'code-reviewer.toml'))).toBe(
       false,
     );

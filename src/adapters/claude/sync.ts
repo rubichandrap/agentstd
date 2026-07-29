@@ -13,12 +13,6 @@ export async function sync(ctx: SyncContext): Promise<SyncResult> {
   const operations: FileOperation[] = [];
   const outputRoot = ctx.outputRoot ?? ctx.projectRoot;
 
-  const destSkills = claudeSkillsDir(outputRoot);
-
-  if (!ctx.dryRun) {
-    await ensureDir(destSkills);
-  }
-
   const skillResult = await syncClaudeSkills(ctx, operations);
 
   for (const c of skillResult.changed) {

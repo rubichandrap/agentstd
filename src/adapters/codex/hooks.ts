@@ -67,8 +67,18 @@ export async function upsertCodexPreToolUseHook(
     if (key === 'PreToolUse') continue;
     finalHooks[key] = hooks[key];
   }
-  finalHooks.PreToolUse = filtered;
-  await writeJson(hooksPath, { ...current, hooks: finalHooks });
+  if (filtered.length > 0) {
+    finalHooks.PreToolUse = filtered;
+  }
+
+  const next: CodexHooksConfig = { ...current };
+  if (Object.keys(finalHooks).length > 0) {
+    next.hooks = finalHooks;
+  } else {
+    delete next.hooks;
+  }
+
+  await writeJson(hooksPath, next);
 }
 
 export async function removeCodexPreToolUseHook(

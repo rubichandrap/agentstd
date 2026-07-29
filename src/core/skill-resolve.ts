@@ -2,6 +2,22 @@ import path from 'node:path';
 import type { AgentStdConfig } from './config';
 import type { SkillSource } from './skill';
 
+function homeSource(homeRoot: string, config: AgentStdConfig): SkillSource {
+  return {
+    root: homeRoot,
+    dir: path.resolve(homeRoot, config.skills.homeDir),
+    label: 'home',
+  };
+}
+
+function projectSource(projectRoot: string, config: AgentStdConfig): SkillSource {
+  return {
+    root: projectRoot,
+    dir: path.resolve(projectRoot, config.skills.dir),
+    label: 'project',
+  };
+}
+
 export function resolveSkillSources(
   projectRoot: string,
   config: AgentStdConfig,
@@ -10,35 +26,12 @@ export function resolveSkillSources(
   hasHomeConfig = true,
 ): SkillSource[] {
   if (scope === 'global') {
-    return [
-      {
-        root: homeRoot,
-        dir: path.join(homeRoot, config.skills.homeDir),
-        label: 'home',
-      },
-    ];
+    return [homeSource(homeRoot, config)];
   }
 
   if (config.projectOnly || !hasHomeConfig) {
-    return [
-      {
-        root: projectRoot,
-        dir: path.resolve(projectRoot, config.skills.dir),
-        label: 'project',
-      },
-    ];
+    return [projectSource(projectRoot, config)];
   }
 
-  return [
-    {
-      root: homeRoot,
-      dir: path.join(homeRoot, config.skills.homeDir),
-      label: 'home',
-    },
-    {
-      root: projectRoot,
-      dir: path.resolve(projectRoot, config.skills.dir),
-      label: 'project',
-    },
-  ];
+  return [homeSource(homeRoot, config), projectSource(projectRoot, config)];
 }

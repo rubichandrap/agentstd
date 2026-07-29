@@ -56,4 +56,19 @@ describe('removeManagedBlock', () => {
     expect(result.changed).toBe(true);
     expect(result.text).toBe('<!-- agentstd:start other -->\nB\n<!-- agentstd:end other -->\n');
   });
+
+  it('upserts and removes a slash-style (//) comment block', () => {
+    const original = '// JS file config\n';
+    const upserted = upsertManagedBlock(original, 'custom-rules', 'const x = 1;', {
+      commentStyle: 'slash',
+    });
+    expect(upserted.changed).toBe(true);
+    expect(upserted.text).toContain('// agentstd:start custom-rules');
+    expect(upserted.text).toContain('const x = 1;');
+    expect(upserted.text).toContain('// agentstd:end custom-rules');
+
+    const removed = removeManagedBlock(upserted.text, 'custom-rules', { commentStyle: 'slash' });
+    expect(removed.changed).toBe(true);
+    expect(removed.text).toBe(original);
+  });
 });

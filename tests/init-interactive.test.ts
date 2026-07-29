@@ -63,9 +63,7 @@ describe('init interactive target selection', () => {
       throw new Error(`exit ${code ?? 0}`);
     }) as never;
 
-    await expect(initCmd({ interactive: false, targets: ['nonsense'] })).rejects.toThrow(
-      'exit 1',
-    );
+    await expect(initCmd({ interactive: false, targets: ['nonsense'] })).rejects.toThrow('exit 1');
 
     process.exit = exit;
     expect(await fs.pathExists(path.join(projectDir, '.agentstd.yaml'))).toBe(false);

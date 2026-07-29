@@ -187,14 +187,14 @@ async function resetConfig(configFile: string, config: unknown): Promise<void> {
   if (bak) log.info(`  Backup: ${bak}`);
 }
 
-function projectDefaultConfig(targets: string[] = DEFAULT_TARGETS): Record<string, unknown> {
+function baseDefaultConfig(targets: string[], preToolUseCommand: string): Record<string, unknown> {
   return {
     version: 1,
     projectOnly: false,
     targets,
     hooks: {
       preToolUse: {
-        command: 'node .agentstd/hooks/pretooluse.js',
+        command: preToolUseCommand,
       },
     },
     skills: {
@@ -220,41 +220,16 @@ function projectDefaultConfig(targets: string[] = DEFAULT_TARGETS): Record<strin
   };
 }
 
+function projectDefaultConfig(targets: string[] = DEFAULT_TARGETS): Record<string, unknown> {
+  return baseDefaultConfig(targets, 'node .agentstd/hooks/pretooluse.js');
+}
+
 function globalDefaultConfig(
   home: string,
   targets: string[] = DEFAULT_TARGETS,
 ): Record<string, unknown> {
   const homeHookPath = path.join(home, '.agentstd', 'hooks', 'pretooluse.js');
-  return {
-    version: 1,
-    projectOnly: false,
-    targets,
-    hooks: {
-      preToolUse: {
-        command: `node ${homeHookPath}`,
-      },
-    },
-    skills: {
-      dir: '.agents/skills',
-      homeDir: '.agents/skills',
-    },
-    instructions: {
-      shared: '.agentstd/instructions/shared.md',
-    },
-    mcpServers: {},
-    permissions: {
-      commands: {
-        allow: [],
-        prompt: [],
-        deny: [],
-      },
-      files: {
-        denyRead: [],
-        denyWrite: [],
-      },
-    },
-    agents: {},
-  };
+  return baseDefaultConfig(targets, `node "${homeHookPath}"`);
 }
 
 async function createProjectDefaults(

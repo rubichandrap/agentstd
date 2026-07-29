@@ -6,4 +6,5 @@ dist
 .scratch
 .agents
 .claude
+.codex
 skills-lock.json

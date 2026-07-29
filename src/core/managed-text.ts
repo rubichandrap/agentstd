@@ -1,12 +1,18 @@
 const MARKER_PREFIX = 'agentstd';
 
-type CommentStyle = 'markdown' | 'hash';
+type CommentStyle = 'markdown' | 'hash' | 'slash';
 
 function markers(id: string, commentStyle: CommentStyle): { start: string; end: string } {
   if (commentStyle === 'hash') {
     return {
       start: `# ${MARKER_PREFIX}:start ${id}`,
       end: `# ${MARKER_PREFIX}:end ${id}`,
+    };
+  }
+  if (commentStyle === 'slash') {
+    return {
+      start: `// ${MARKER_PREFIX}:start ${id}`,
+      end: `// ${MARKER_PREFIX}:end ${id}`,
     };
   }
   return {

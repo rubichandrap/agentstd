@@ -119,17 +119,13 @@ export async function uninstallCmd(
         const bak = `${purgeConfigPath}.bak`;
         await fs.copy(purgeConfigPath, bak, { overwrite: true });
         await fs.remove(purgeConfigPath);
-        log.success(
-          `Removed ${path.relative(commandRoot, purgeConfigPath) || purgeConfigPath}`,
-        );
+        log.success(`Removed ${path.relative(commandRoot, purgeConfigPath) || purgeConfigPath}`);
         log.dim(`  backup: ${bak}`);
       }
       // .agentstd/ dir (hooks, instructions).
       if (await fileExists(purgeAgentStdDir)) {
         await fs.remove(purgeAgentStdDir);
-        log.success(
-          `Removed ${path.relative(commandRoot, purgeAgentStdDir) || purgeAgentStdDir}`,
-        );
+        log.success(`Removed ${path.relative(commandRoot, purgeAgentStdDir) || purgeAgentStdDir}`);
       }
       // Optional full skills nuke.
       if (opts.purgeSkills) {
@@ -182,9 +178,7 @@ export async function uninstallCmd(
   if (shouldPurgeConfig) {
     console.log(pc.dim('  Config removed.'));
     if (!opts.purgeSkills) {
-      console.log(
-        pc.dim('  .agents/skills/ left in place. Re-run with --purge-skills to remove.'),
-      );
+      console.log(pc.dim('  .agents/skills/ left in place. Re-run with --purge-skills to remove.'));
     }
   } else {
     console.log(

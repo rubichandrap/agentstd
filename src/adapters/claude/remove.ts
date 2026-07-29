@@ -51,9 +51,7 @@ export async function remove(ctx: RemoveContext): Promise<RemoveResult> {
           _agentstd?: string;
         }[];
         const expected = config.hooks.preToolUse
-          ? claudeHookCommand(
-              config.hooks.preToolUse.command ?? DEFAULT_PROJECT_HOOK_COMMAND,
-            )
+          ? claudeHookCommand(config.hooks.preToolUse.command ?? DEFAULT_PROJECT_HOOK_COMMAND)
           : undefined;
         const filtered = existing.filter((h) => !isAgentStdHook(h as never, expected));
         if (filtered.length !== existing.length) {
