@@ -4,4 +4,6 @@ dist
 *.log
 .commandcode
 .scratch
-
+.agents
+.claude
+skills-lock.json
