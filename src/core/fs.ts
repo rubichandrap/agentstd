@@ -54,3 +54,20 @@ export async function writeConfigWithBackup(
   await fs.writeFile(filePath, YAML.stringify(obj));
   return null;
 }
+
+/**
+ * Ensures a `.gitkeep` file exists in `dir` so the directory can be committed
+ * to git even though it is listed in `.gitignore`. The root `.gitignore`
+ * already contains `!**\/.gitkeep` so this file will be tracked automatically.
+ * When `dryRun` is true the file is not written but the parent directory is
+ * still created (matching sync semantics for non-gitkeep files).
+ */
+export async function ensureGitKeep(dir: string, dryRun?: boolean): Promise<void> {
+  await fs.ensureDir(dir);
+  if (!dryRun) {
+    const keepFile = path.join(dir, '.gitkeep');
+    if (!(await fileExists(keepFile))) {
+      await fs.writeFile(keepFile, '');
+    }
+  }
+}

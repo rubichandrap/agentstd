@@ -2,7 +2,7 @@ import path from 'node:path';
 import fs from 'fs-extra';
 import type { AgentStdConfig } from '../../core/config';
 import { mcpServersOf } from '../../core/config-defaults';
-import { fileExists } from '../../core/fs';
+import { ensureGitKeep, fileExists } from '../../core/fs';
 import { removeManagedBlock, renderTomlTable, upsertManagedBlock } from '../../core/managed-text';
 import { codexConfigPath } from '../../core/paths';
 import type { FileOperation } from '../../core/types';
@@ -64,6 +64,7 @@ export async function syncCodexConfigToml(
   if (!dryRun) {
     await fs.ensureDir(path.dirname(filePath));
     await fs.writeFile(filePath, text);
+    await ensureGitKeep(path.dirname(filePath));
   }
   return ['.codex/config.toml'];
 }
