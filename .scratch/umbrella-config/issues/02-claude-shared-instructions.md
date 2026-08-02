@@ -4,14 +4,14 @@
 
 **Blocked by:** None — can start immediately.
 
-**Status:** ready-for-agent
+**Status:** completed
 
-- [ ] Project sync writes a managed block into `CLAUDE.md` from `instructions.shared`
-- [ ] Global sync writes the managed block into `~/.claude/CLAUDE.md`
-- [ ] User-authored content in `CLAUDE.md` is preserved around the managed block
-- [ ] Removing `instructions.shared` strips the managed block (and removes the file when it becomes empty)
-- [ ] A project sync inheriting a home-defined instruction file reads the source from the home layer
-- [ ] A missing instruction source file warns and writes an empty body instead of failing
-- [ ] `doctor`/`check` passes when the block matches and reports drift when it does not
-- [ ] `uninstall` strips the managed block without touching user content
-- [ ] Claude adapter `instructions` capability reports `native`
+- [x] Project sync writes a managed block into `CLAUDE.md` from `instructions.shared`
+- [x] Global sync writes the managed block into `~/.claude/CLAUDE.md`
+- [x] User-authored content in `CLAUDE.md` is preserved around the managed block
+- [x] Removing `instructions.shared` strips the managed block (and removes the file when it becomes empty)
+- [x] A project sync inheriting a home-defined instruction file reads the source from the home layer
+- [x] A missing instruction source file warns and writes an empty body instead of failing
+- [x] `doctor`/`check` passes when the block matches and reports drift when it does not
+- [x] `uninstall` strips the managed block without touching user content
+- [x] Claude adapter `instructions` capability reports `native`
