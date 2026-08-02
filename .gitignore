@@ -31,7 +31,3 @@ dist
 .mcp.json
 skills-lock.json
 graphify-out
-
-# Dev scratch
-.scratch
-!.scratch/.gitkeep
