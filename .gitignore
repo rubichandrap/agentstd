@@ -28,6 +28,7 @@ dist
 .opencode/*
 !.opencode/mcp.json
 !.opencode/.gitkeep
+.mcp.json
 skills-lock.json
 graphify-out
 
