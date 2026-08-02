@@ -4,9 +4,9 @@
 
 **Blocked by:** 01 (MCP Server Target Scoping), 02 (Claude Shared Instructions)
 
-**Status:** ready-for-agent
+**Status:** completed
 
-- [ ] README feature matrix lists Claude `Instructions` as native `CLAUDE.md`
-- [ ] README MCP config-field section documents the `targets` filter with an example
-- [ ] `targets list` capability messaging reflects the Claude `instructions: native` declaration
-- [ ] Glossary and ADR `0001` remain consistent with the shipped behavior
+- [x] README feature matrix lists Claude `Instructions` as native `CLAUDE.md`
+- [x] README MCP config-field section documents the `targets` filter with an example
+- [x] `targets list` capability messaging reflects the Claude `instructions: native` declaration
+- [x] Glossary and ADR `0001` remain consistent with the shipped behavior
