@@ -2,6 +2,7 @@ import path from 'node:path';
 import { permissionsOf } from '../../core/config-defaults';
 import { fileExists } from '../../core/fs';
 import { syncClaudeAgents } from './agents';
+import { syncClaudeInstructions } from './instructions';
 import { syncClaudeMcpServers } from './mcp';
 import type { FileOperation, SyncContext, SyncResult } from '../../core/types';
 import { needsSettingsUpdate, upsertClaudeSettings } from './settings';
@@ -12,11 +13,32 @@ export async function sync(ctx: SyncContext): Promise<SyncResult> {
   const warnings: string[] = [];
   const operations: FileOperation[] = [];
   const outputRoot = ctx.outputRoot ?? ctx.projectRoot;
+  const scope = ctx.scope ?? 'project';
 
   const skillResult = await syncClaudeSkills(ctx, operations);
 
   for (const c of skillResult.changed) {
     changed.push(c);
+  }
+
+  const instructions = await syncClaudeInstructions(
+    ctx.projectRoot,
+    outputRoot,
+    ctx.config,
+    scope,
+    ctx.dryRun,
+    ctx.homeRoot,
+    ctx.pathSources,
+  );
+  for (const w of instructions.warnings) warnings.push(w);
+  if (instructions.changed && instructions.path) {
+    const operationType =
+      instructions.operationType ?? (instructions.targetExists ? 'update-file' : 'create-file');
+    operations.push({
+      type: operationType,
+      path: instructions.path,
+    });
+    changed.push(instructions.path);
   }
 
   changed.push(...(await syncClaudeMcpServers(outputRoot, ctx.config, operations, ctx.dryRun)));

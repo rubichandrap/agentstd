@@ -11,7 +11,7 @@ export const claudeAdapter: AgentAdapter = {
   capabilities: {
     preToolUse: 'native',
     skills: 'native',
-    instructions: 'partial',
+    instructions: 'native',
     mcpServers: 'native',
     permissions: 'partial',
     agents: 'native',

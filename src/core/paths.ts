@@ -65,6 +65,14 @@ export function claudeAgentsDir(root: string): string {
   return path.join(claudeDir(root), 'agents');
 }
 
+export function claudeMdPath(root: string): string {
+  return path.join(root, 'CLAUDE.md');
+}
+
+export function homeClaudeMdPath(root: string): string {
+  return path.join(claudeDir(root), 'CLAUDE.md');
+}
+
 export function mcpConfigPath(root: string): string {
   return path.join(root, '.mcp.json');
 }

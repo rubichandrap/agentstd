@@ -5,6 +5,7 @@ import { claudeDir, claudeSettingsPath, claudeSkillsDir, homeRoot } from '../../
 import { listMergedSkills } from '../../core/skill';
 import { resolveSkillSources } from '../../core/skill-resolve';
 import type { DoctorCheck, DoctorContext, DoctorResult } from '../../core/types';
+import { hasClaudeInstructionsSynced } from './instructions';
 import { hasPreToolUseHookSynced } from './settings';
 
 export async function doctor(ctx: DoctorContext): Promise<DoctorResult> {
@@ -12,6 +13,7 @@ export async function doctor(ctx: DoctorContext): Promise<DoctorResult> {
   const root = ctx.projectRoot;
   const outputRoot = ctx.outputRoot ?? root;
   const config = ctx.config;
+  const scope = ctx.scope ?? 'project';
 
   // .claude directory
   const claudeDirExists = await fileExists(claudeDir(outputRoot));
@@ -20,6 +22,23 @@ export async function doctor(ctx: DoctorContext): Promise<DoctorResult> {
     status: claudeDirExists ? 'pass' : 'fail',
     message: claudeDirExists ? undefined : 'Run: agentstd sync',
   });
+
+  // CLAUDE.md shared instructions
+  if (config.instructions.shared) {
+    const synced = await hasClaudeInstructionsSynced(
+      root,
+      outputRoot,
+      config,
+      scope,
+      ctx.homeRoot,
+      ctx.pathSources,
+    );
+    checks.push({
+      label: 'CLAUDE.md instructions synced',
+      status: synced ? 'pass' : 'warn',
+      message: synced ? undefined : 'Run: agentstd sync',
+    });
+  }
 
   // .claude/settings.json
   const settingsExists = await fileExists(claudeSettingsPath(outputRoot));
@@ -44,7 +63,7 @@ export async function doctor(ctx: DoctorContext): Promise<DoctorResult> {
     root,
     config,
     ctx.homeRoot ?? homeRoot(),
-    ctx.scope ?? 'project',
+    scope,
     ctx.hasHomeConfig ?? true,
   );
   const skills = await listMergedSkills(sources);

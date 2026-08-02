@@ -1,10 +1,13 @@
 import path from 'node:path';
 import fs from 'fs-extra';
 import { fileExists, readJsonIfExists, writeJson } from '../../core/fs';
+import { removeManagedBlock } from '../../core/managed-text';
 import {
   claudeAgentsDir,
+  claudeMdPath,
   claudeSettingsPath,
   claudeSkillsDir,
+  homeClaudeMdPath,
   homeRoot,
   mcpConfigPath,
 } from '../../core/paths';
@@ -107,6 +110,30 @@ export async function remove(ctx: RemoveContext): Promise<RemoveResult> {
       }
     } catch (err) {
       warnings.push(`Failed to clean Claude settings: ${(err as Error).message}`);
+    }
+  }
+
+  // CLAUDE.md — remove the managed instructions block.
+  const claudeMdFile =
+    ctx.scope === 'global' ? homeClaudeMdPath(outputRoot) : claudeMdPath(outputRoot);
+  const relativeClaudeMd = path.relative(outputRoot, claudeMdFile) || claudeMdFile;
+  if (await fileExists(claudeMdFile)) {
+    try {
+      const current = await fs.readFile(claudeMdFile, 'utf8');
+      const { text, changed } = removeManagedBlock(current, 'instructions');
+      if (changed) {
+        operations.push({
+          type: 'update-file',
+          path: relativeClaudeMd,
+        });
+        if (!dryRun) {
+          if (text.trim().length === 0) await fs.remove(claudeMdFile);
+          else await fs.writeFile(claudeMdFile, text);
+        }
+        removed.push(relativeClaudeMd);
+      }
+    } catch (err) {
+      warnings.push(`Failed to clean ${relativeClaudeMd}: ${(err as Error).message}`);
     }
   }
 
