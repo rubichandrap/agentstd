@@ -25,7 +25,7 @@ A configuration boundary flag enforcing project isolation by disabling home-laye
 _Avoid_: Isolated mode, standalone flag
 
 **Capability**:
-A declared level of support an adapter has for an umbrella config group, one of `native`, `partial`, or `none` — e.g. Claude declares `instructions: native` once shared-instruction writes land.
+A declared level of support an adapter has for an umbrella config group, one of `native`, `partial`, or `none` — e.g. Claude declares `instructions: native` because shared instructions compile to `CLAUDE.md`.
 _Avoid_: Feature support, feature flag, coverage
 
 **Target Scoping**:

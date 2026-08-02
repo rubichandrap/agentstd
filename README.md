@@ -12,7 +12,7 @@ Write your agent rules once. Sync them everywhere.
 
 ## What is AgentStd?
 
-AgentStd gives your repository one source of truth for AI agent behavior. You write portable config once, then AgentStd compiles it into provider-native files such as `.claude/settings.json`, `.mcp.json`, `.codex/hooks.json`, and Codex `AGENTS.md`.
+AgentStd gives your repository one source of truth for AI agent behavior. You write portable config once, then AgentStd compiles it into provider-native files such as `.claude/settings.json`, `.claude/CLAUDE.md`, `.mcp.json`, `.codex/hooks.json`, and Codex `AGENTS.md`.
 
 ## Why AgentStd?
 
@@ -97,7 +97,7 @@ Seeds a **home-level** AgentStd config so a shared skill library lives across al
 
 `AGENTSTD_HOME` overrides the home location (useful for testing or non-standard `$HOME`). Re-running `init --global` upgrades an existing home config in place (same migration + backfill + `.bak` flow as project `init`); `--force` resets and `--dry-run` previews.
 
-Run `agentstd sync` from `$HOME` to apply the home config to provider home folders. This is a global sync: Claude output goes to `~/.claude/*`, Codex output goes to `~/.codex/*`, and Codex shared instructions go to `~/.codex/AGENTS.md`.
+Run `agentstd sync` from `$HOME` to apply the home config to provider home folders. This is a global sync: Claude output goes to `~/.claude/*` (shared instructions to `~/.claude/CLAUDE.md`), Codex output goes to `~/.codex/*`, and Codex shared instructions go to `~/.codex/AGENTS.md`.
 
 ## Home and project layers
 
@@ -172,13 +172,14 @@ Sync has two scopes:
 
 For Claude, this:
 
+- Writes shared instructions to `CLAUDE.md` (project sync) or `~/.claude/CLAUDE.md` (global sync) using AgentStd managed markers
 - Copies all skills to `.claude/skills/`
 - Updates `.claude/settings.json` with the PreToolUse hook
 - Updates `.claude/settings.json` with portable permissions
 - Writes MCP servers to `.mcp.json` under `agentstd:`-prefixed provider ids
 - Writes AgentStd agents to `.claude/agents/`
 - Merges with existing settings (never overwrites unrelated config)
-- Removes stale AgentStd-owned hooks, permissions, MCP servers, and agent files when they are removed from `.agentstd.yaml`
+- Removes stale AgentStd-owned hooks, permissions, MCP servers, managed instruction blocks, and agent files when they are removed from `.agentstd.yaml`
 - Is idempotent — running it multiple times produces the same result
 
 For Codex, this:
@@ -264,7 +265,7 @@ Removes AgentStd from the current project (or the home layer with `--global`). I
 
 What gets removed:
 
-- **Provider artifacts** (via each adapter's `remove()`): agentstd hooks stripped from `.claude/settings.json` and `.codex/hooks.json`; `agentstd:`-prefixed MCP servers stripped from `.mcp.json`; managed `agentstd:start/end` blocks stripped from `AGENTS.md` and `.codex/config.toml`; `.codex/rules/agentstd.rules` deleted; configured agent files (`.claude/agents/<id>.md`, `.codex/agents/<id>.toml`) deleted; copied skill dirs removed from `.claude/skills/`. Files left empty by stripping are deleted.
+- **Provider artifacts** (via each adapter's `remove()`): agentstd hooks stripped from `.claude/settings.json` and `.codex/hooks.json`; `agentstd:`-prefixed MCP servers stripped from `.mcp.json`; managed `agentstd:start/end` blocks stripped from `CLAUDE.md`, `AGENTS.md`, and `.codex/config.toml`; `.codex/rules/agentstd.rules` deleted; configured agent files (`.claude/agents/<id>.md`, `.codex/agents/<id>.toml`) deleted; copied skill dirs removed from `.claude/skills/`. Files left empty by stripping are deleted.
 - **`.agentstd.yaml`** — deleted when all configured targets are removed in this run (a `.bak` backup is written first).
 - **`.agentstd/`** directory (hooks, instructions) — deleted under the same condition as `.agentstd.yaml`.
 
@@ -312,7 +313,7 @@ Core fields:
 - `targets` — target adapters to sync, currently `claude` and `codex`
 - `hooks.preToolUse.command` — shared pre-tool-use command. The default project hook command is rendered provider-specifically so Claude resolves from `${CLAUDE_PROJECT_DIR}` and Codex resolves from the git repository root; custom commands are preserved exactly.
 - `skills.dir` / `skills.homeDir` — project and home skill source directories
-- `instructions.shared` — shared instruction file used by provider adapters
+- `instructions.shared` — shared instruction file compiled into `CLAUDE.md` (Claude) and `AGENTS.md` (Codex) managed blocks
 
 Umbrella config fields:
 
@@ -320,6 +321,20 @@ Umbrella config fields:
 - `permissions.commands` — token-array command rules such as `[pnpm, test]`
 - `permissions.files` — portable read/write file restrictions where supported
 - `agents` — shared subagent definitions compiled to provider-native agent files
+
+#### MCP server target scoping
+
+Every `mcpServers` entry may declare an optional `targets` list restricting which provider adapters compile it. Absent (or empty) means the server syncs to every active target; a non-empty list scopes it to only those adapters. Target ids are validated against the registered adapter ids, so a typo fails fast at config load instead of silently scoping nothing.
+
+```yaml
+mcpServers:
+  github:
+    command: npx
+    args: ["-y", "@modelcontextprotocol/server-github"]
+  slack:
+    command: slack-mcp
+    targets: ["claude"]   # compiled to Claude only
+```
 
 ## Supported Targets & Feature Matrix
 
@@ -329,7 +344,7 @@ AgentStd currently supports **Claude Code** (`claude`) and **OpenAI Codex CLI** 
 |---------------|-------------------------|----------------------------|
 | **PreToolUse Hooks** | Native (`.claude/settings.json`) | Native (`.codex/hooks.json`) |
 | **Skills** | Native copy (`.claude/skills/`) | Native (`.agents/skills/`) |
-| **Instructions** | System prompts / settings | Native (`AGENTS.md` / `~/.codex/AGENTS.md`) |
+| **Instructions** | Native (`CLAUDE.md` / `~/.claude/CLAUDE.md`) | Native (`AGENTS.md` / `~/.codex/AGENTS.md`) |
 | **MCP Servers** | Native (`.mcp.json`) | Native (`.codex/config.toml`) |
 | **Command Permissions** | Native `Bash(...)` rules | Native (`.codex/rules/agentstd.rules`) |
 | **File Permissions** | Native `Read(...)` & `Write(...)` | ⚠️ Unsupported by Codex rules |
@@ -343,6 +358,7 @@ AgentStd currently supports **Claude Code** (`claude`) and **OpenAI Codex CLI** 
   - **Instructions**: Project sync writes managed instruction blocks into root `AGENTS.md`; global sync writes managed blocks into `~/.codex/AGENTS.md`.
 - **Claude Code (`claude`)**:
   - **Skills Directory**: Skills are synced into `.claude/skills/`.
+  - **Instructions**: Project sync writes managed instruction blocks into root `CLAUDE.md`; global sync writes managed blocks into `~/.claude/CLAUDE.md`.
   - **MCP Servers**: MCP server identifiers written to `.mcp.json` are prefixed with `agentstd:` (e.g. `agentstd:github`) so `agentstd uninstall` can safely identify and remove only AgentStd-managed entries without touching user-authored servers.
 
 ### Unsupported Adapters Notice
