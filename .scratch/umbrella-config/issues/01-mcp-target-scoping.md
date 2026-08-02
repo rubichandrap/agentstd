@@ -4,13 +4,13 @@
 
 **Blocked by:** None — can start immediately.
 
-**Status:** ready-for-agent
+**Status: completed
 
-- [ ] Schema accepts optional `targets` on each MCP server entry; invalid adapter ids fail config validation with a clear message
-- [ ] Unscoped servers compile to every active target (existing behavior unchanged)
-- [ ] Server scoped to `[claude]` appears in Claude output and is absent from Codex output
-- [ ] Removing a server's scoping restores it to all active targets on the next sync
-- [ ] Re-scoping a server out of a target cleans it from that target's config on the next sync
-- [ ] `--dry-run` and `--check` reflect scoping in their planned operations and exit codes
-- [ ] `doctor` passes when scoped servers match the declared `targets` and reports drift otherwise
-- [ ] `uninstall` cleans scoped servers from the providers that received them
+- [x] Schema accepts optional `targets` on each MCP server entry; invalid adapter ids fail config validation with a clear message
+- [x] Unscoped servers compile to every active target (existing behavior unchanged)
+- [x] Server scoped to `[claude]` appears in Claude output and is absent from Codex output
+- [x] Removing a server's scoping restores it to all active targets on the next sync
+- [x] Re-scoping a server out of a target cleans it from that target's config on the next sync
+- [x] `--dry-run` and `--check` reflect scoping in their planned operations and exit codes
+- [x] `doctor` passes when scoped servers match the declared `targets` and reports drift otherwise
+- [x] `uninstall` cleans scoped servers from the providers that received them
