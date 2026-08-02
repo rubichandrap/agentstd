@@ -30,6 +30,7 @@ const mcpServerSchema = z.object({
   args: z.array(z.string()).default([]),
   url: z.string().optional(),
   env: z.record(z.string()).default({}),
+  targets: z.array(z.string()).optional(),
 });
 
 const agentConfigSchema = z.object({

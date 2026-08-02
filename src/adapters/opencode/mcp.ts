@@ -1,7 +1,7 @@
 import path from 'node:path';
 import fs from 'fs-extra';
 import type { AgentStdConfig } from '../../core/config';
-import { mcpServersOf } from '../../core/config-defaults';
+import { mcpServersForTarget } from '../../core/config-defaults';
 import { ensureGitKeep, fileExists, readJsonIfExists, writeJson } from '../../core/fs';
 import { openCodeMcpPath } from '../../core/paths';
 import type { FileOperation } from '../../core/types';
@@ -19,7 +19,7 @@ export async function syncOpenCodeMcpServers(
   operations: FileOperation[],
   dryRun?: boolean,
 ): Promise<string[]> {
-  const serverEntries = Object.entries(mcpServersOf(config));
+  const serverEntries = Object.entries(mcpServersForTarget(config, 'opencode'));
   const filePath = openCodeMcpPath(outputRoot);
   const exists = await fileExists(filePath);
   if (!exists && serverEntries.length === 0) return [];

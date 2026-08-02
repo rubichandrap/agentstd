@@ -1,6 +1,7 @@
 import path from 'node:path';
 import fs from 'fs-extra';
 import YAML from 'yaml';
+import { listAdapters } from '../../adapters';
 import { agentStdConfigSchema } from '../../core/config';
 import {
   type ConfigPathSources,
@@ -24,6 +25,24 @@ export interface LoadedAgentStdContext {
   pathSources: ConfigPathSources;
 }
 
+function validateMcpServerTargets(config: AgentStdConfig, configPath: string): void {
+  const knownIds = new Set(listAdapters().map((a) => a.id));
+  const issues: Array<{ path: (string | number)[]; message: string }> = [];
+  for (const [name, server] of Object.entries(config.mcpServers ?? {})) {
+    for (const targetId of server.targets ?? []) {
+      if (!knownIds.has(targetId)) {
+        issues.push({
+          path: ['mcpServers', name, 'targets'],
+          message: `Unknown target "${targetId}". Supported targets: ${[...knownIds].join(', ')}`,
+        });
+      }
+    }
+  }
+  if (issues.length > 0) {
+    throw new ConfigValidationError(configPath, issues);
+  }
+}
+
 export async function loadAgentStdContext(
   root: string,
   resolvedHomeRoot: string,
@@ -38,6 +57,7 @@ export async function loadAgentStdContext(
   if (path.resolve(root) === path.resolve(resolvedHomeRoot)) {
     const { config, raw } = await readStandaloneConfig(configPath);
     const obj = (raw ?? {}) as Record<string, unknown>;
+    validateMcpServerTargets(config, configPath);
     return {
       config,
       outputRoot: resolvedHomeRoot,
@@ -53,6 +73,7 @@ export async function loadAgentStdContext(
     resolvedHomeRoot,
     flagProjectOnly,
   );
+  validateMcpServerTargets(merged.config, path.join(root, '.agentstd.yaml'));
   return {
     config: merged.config,
     outputRoot: root,

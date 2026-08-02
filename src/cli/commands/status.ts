@@ -78,7 +78,14 @@ export async function statusCmd(options?: StatusOptions): Promise<void> {
   log.dim(`skills: ${skills.length} total (${projectSkillCount} project, ${homeSkillCount} home)`);
   log.dim(`hooks: ${configuredHooks(config).join(', ') || 'none'}`);
   log.dim(`instructions: ${configuredInstructions(config).join(', ') || 'none'}`);
-  log.dim(`mcpServers: ${Object.keys(config.mcpServers ?? {}).join(', ') || 'none'}`);
+  const mcpServers = config.mcpServers ?? {};
+  const mcpSummary = Object.entries(mcpServers)
+    .map(([name, server]) => {
+      const scoped = server.targets?.length ? ` (${server.targets.join(', ')})` : '';
+      return `${name}${scoped}`;
+    })
+    .join(', ') || 'none';
+  log.dim(`mcpServers: ${mcpSummary}`);
   log.dim(`permissions: ${configuredPermissions(config).join(', ') || 'none'}`);
   log.dim(`agents: ${Object.keys(config.agents ?? {}).join(', ') || 'none'}`);
 

@@ -1,7 +1,7 @@
 import path from 'node:path';
 import fs from 'fs-extra';
 import type { AgentStdConfig } from '../../core/config';
-import { mcpServersOf } from '../../core/config-defaults';
+import { mcpServersForTarget } from '../../core/config-defaults';
 import { ensureGitKeep, fileExists, readJsonIfExists, writeJson } from '../../core/fs';
 import { commandCodeMcpPath } from '../../core/paths';
 import type { FileOperation } from '../../core/types';
@@ -19,7 +19,7 @@ export async function syncCommandCodeMcpServers(
   operations: FileOperation[],
   dryRun?: boolean,
 ): Promise<string[]> {
-  const serverEntries = Object.entries(mcpServersOf(config));
+  const serverEntries = Object.entries(mcpServersForTarget(config, 'commandcode'));
   const filePath = commandCodeMcpPath(outputRoot);
   const exists = await fileExists(filePath);
   if (!exists && serverEntries.length === 0) return [];

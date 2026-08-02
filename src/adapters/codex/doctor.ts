@@ -9,6 +9,7 @@ import {
   codexHooksPath,
 } from '../../core/paths';
 import type { DoctorCheck, DoctorContext, DoctorResult } from '../../core/types';
+import { mcpServersForTarget } from '../../core/config-defaults';
 import { hasCodexPreToolUseHookSynced } from './hooks';
 import { hasCodexInstructionsSynced } from './instructions';
 
@@ -63,7 +64,7 @@ export async function doctor(ctx: DoctorContext): Promise<DoctorResult> {
     });
   }
 
-  if (Object.keys(config.mcpServers ?? {}).length > 0) {
+  if (Object.keys(mcpServersForTarget(config, 'codex')).length > 0) {
     checks.push({
       label: '.codex/config.toml found',
       status: (await fileExists(codexConfigPath(outputRoot))) ? 'pass' : 'warn',

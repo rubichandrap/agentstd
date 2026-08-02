@@ -1,7 +1,7 @@
 import path from 'node:path';
 import fs from 'fs-extra';
 import type { AgentStdConfig } from '../../core/config';
-import { mcpServersOf } from '../../core/config-defaults';
+import { mcpServersForTarget } from '../../core/config-defaults';
 import { ensureGitKeep, fileExists } from '../../core/fs';
 import { removeManagedBlock, renderTomlTable, upsertManagedBlock } from '../../core/managed-text';
 import { codexConfigPath } from '../../core/paths';
@@ -14,7 +14,7 @@ export async function syncCodexConfigToml(
   dryRun?: boolean,
 ): Promise<string[]> {
   const blocks: string[] = [];
-  for (const [name, server] of Object.entries(mcpServersOf(config))) {
+  for (const [name, server] of Object.entries(mcpServersForTarget(config, 'codex'))) {
     blocks.push(
       renderTomlTable(
         `mcp_servers.${name}`,
